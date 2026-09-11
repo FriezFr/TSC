@@ -246,3 +246,25 @@ CREATE INDEX IF NOT EXISTS idx_habit_logs_user_date ON public.habit_logs (user_i
 CREATE INDEX IF NOT EXISTS idx_notes_user_pinned ON public.notes (user_id, is_pinned, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_telegram_links_code ON public.telegram_links (link_code);
 CREATE INDEX IF NOT EXISTS idx_telegram_links_chat ON public.telegram_links (chat_id);
+
+-- 13. CHAT MESSAGES TABLE (Synced from Telegram, WhatsApp, and Web AI)
+CREATE TABLE IF NOT EXISTS public.chat_messages (
+  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  user_id UUID REFERENCES auth.users(id) ON DELETE CASCADE NOT NULL,
+  source TEXT NOT NULL DEFAULT 'telegram', -- 'telegram' | 'web' | 'whatsapp'
+  role TEXT NOT NULL CHECK (role IN ('user', 'assistant')),
+  content TEXT NOT NULL,
+  media_type TEXT DEFAULT 'text',
+  media_name TEXT,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+ALTER TABLE public.chat_messages ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "Users can view their own chat messages" ON public.chat_messages
+  FOR SELECT USING (auth.uid() = user_id);
+
+CREATE POLICY "Users can insert their own chat messages" ON public.chat_messages
+  FOR INSERT WITH CHECK (auth.uid() = user_id);
+
+CREATE INDEX IF NOT EXISTS idx_chat_messages_user_created ON public.chat_messages(user_id, created_at DESC);

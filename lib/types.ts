@@ -163,3 +163,14 @@ export const BACCALAUREATE_SUBJECTS = [
 
 // Backwards compatibility alias
 export const THANAWEYA_SUBJECTS = BACCALAUREATE_SUBJECTS;
+
+export interface ChatMessage {
+  id: string;
+  user_id: string;
+  source: 'telegram' | 'web' | 'whatsapp';
+  role: 'user' | 'assistant';
+  content: string;
+  media_type?: 'text' | 'document' | 'photo' | 'voice' | 'audio';
+  media_name?: string;
+  created_at: string;
+}

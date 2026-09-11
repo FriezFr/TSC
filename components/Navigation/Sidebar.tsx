@@ -11,6 +11,7 @@ import {
   Layers,
   Flame,
   FileText,
+  MessageSquare,
   Settings,
   Sparkles,
   BrainCircuit,
@@ -36,6 +37,7 @@ export const NAV_DEFINITIONS: NavDef[] = [
   { href: '/dashboard/flashcards', key: 'navFlashcards', icon: BrainCircuit },
   { href: '/dashboard/habits', key: 'navHabits', icon: Sparkles },
   { href: '/dashboard/notes', key: 'navNotes', icon: FileText },
+  { href: '/dashboard/chat', key: 'navChat', icon: MessageSquare },
   { href: '/dashboard/settings', key: 'navSettings', icon: Settings },
 ];
 

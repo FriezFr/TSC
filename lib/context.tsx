@@ -13,6 +13,7 @@ import {
   Note,
   TimetableSlot,
   UserProfile,
+  ChatMessage,
 } from './types';
 import { getSupabaseClient } from './supabase/client';
 import { Language, Translations, translations } from './i18n';
@@ -52,6 +53,8 @@ interface AppContextType {
   flashcards: Flashcard[];
   addDeck: (subject: string, title: string, description?: string) => Promise<void>;
   addFlashcard: (deckId: string, question: string, answer: string) => Promise<void>;
+  deleteFlashcard: (cardId: string) => Promise<void>;
+  deleteDeck: (deckId: string) => Promise<void>;
   recordCardReview: (cardId: string, isCorrect: boolean) => Promise<void>;
   // Habits
   habits: Habit[];
@@ -67,6 +70,11 @@ interface AppContextType {
   telegramCode: string;
   generateTelegramCode: () => Promise<string>;
   telegramLinked: boolean;
+  // Chat Messages (Synced with Telegram and Web)
+  chatMessages: ChatMessage[];
+  sendChatMessage: (content: string) => Promise<void>;
+  refreshChatMessages: () => Promise<void>;
+  clearChatMessages: () => Promise<void>;
 }
 
 const AppContext = createContext<AppContextType | null>(null);
@@ -128,6 +136,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const [notes, setNotes] = useState<Note[]>([]);
   const [telegramCode, setTelegramCode] = useState<string>('');
   const [telegramLinked, setTelegramLinked] = useState<boolean>(false);
+  const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
 
   // Fetch all user tables from Supabase
   const loadUserData = useCallback(async (userId: string) => {
@@ -254,6 +263,14 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         setTelegramCode(tgData.link_code);
         setTelegramLinked(Boolean(tgData.is_linked));
       }
+
+      // 11. Chat Messages (Synced from Telegram and Web)
+      const { data: chatData } = await supabase
+        .from('chat_messages')
+        .select('*')
+        .eq('user_id', userId)
+        .order('created_at', { ascending: true });
+      if (chatData) setChatMessages(chatData);
     } catch (err) {
       console.error('Error fetching Supabase data:', err);
     }
@@ -509,6 +526,81 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
+  const deleteFlashcard = async (cardId: string) => {
+    setFlashcards((prev) => prev.filter((c) => c.id !== cardId));
+    const supabase = getSupabaseClient();
+    if (supabase && user) {
+      await supabase.from('flashcards').delete().eq('id', cardId);
+    }
+  };
+
+  const deleteDeck = async (deckId: string) => {
+    setDecks((prev) => prev.filter((d) => d.id !== deckId));
+    setFlashcards((prev) => prev.filter((c) => c.deck_id !== deckId));
+    const supabase = getSupabaseClient();
+    if (supabase && user) {
+      await supabase.from('flashcards').delete().eq('deck_id', deckId);
+      await supabase.from('flashcard_decks').delete().eq('id', deckId);
+    }
+  };
+
+  // Chat Messages (Telegram & Web Sync)
+  const refreshChatMessages = async () => {
+    const supabase = getSupabaseClient();
+    if (supabase && user) {
+      const { data } = await supabase
+        .from('chat_messages')
+        .select('*')
+        .eq('user_id', user.id)
+        .order('created_at', { ascending: true });
+      if (data) setChatMessages(data);
+    }
+  };
+
+  const sendChatMessage = async (content: string) => {
+    if (!content.trim()) return;
+    const tempUserMsg: ChatMessage = {
+      id: `web-${Date.now()}`,
+      user_id: user?.id || 'temp',
+      source: 'web',
+      role: 'user',
+      content: content.trim(),
+      created_at: new Date().toISOString(),
+    };
+    setChatMessages((prev) => [...prev, tempUserMsg]);
+
+    try {
+      const res = await fetch('/api/chat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ message: content.trim(), userId: user?.id }),
+      });
+      const data = await res.json();
+      if (data.reply) {
+        const assistantMsg: ChatMessage = {
+          id: `ai-${Date.now()}`,
+          user_id: user?.id || 'temp',
+          source: 'web',
+          role: 'assistant',
+          content: data.reply,
+          created_at: new Date().toISOString(),
+        };
+        setChatMessages((prev) => [...prev, assistantMsg]);
+      }
+      await refreshChatMessages();
+    } catch (err) {
+      console.error('Error sending chat message:', err);
+    }
+  };
+
+  const clearChatMessages = async () => {
+    setChatMessages([]);
+    const supabase = getSupabaseClient();
+    if (supabase && user) {
+      await supabase.from('chat_messages').delete().eq('user_id', user.id);
+    }
+  };
+
   // Habits
   const todayStr = new Date().toISOString().split('T')[0];
 
@@ -667,6 +759,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         flashcards,
         addDeck,
         addFlashcard,
+        deleteFlashcard,
+        deleteDeck,
         recordCardReview,
         habits,
         habitLogs,
@@ -679,6 +773,10 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         telegramCode,
         generateTelegramCode,
         telegramLinked,
+        chatMessages,
+        sendChatMessage,
+        refreshChatMessages,
+        clearChatMessages,
       }}
     >
       {children}

@@ -16,9 +16,51 @@ export interface Translations {
   navFlashcards: string;
   navHabits: string;
   navNotes: string;
+  navChat: string;
   navSettings: string;
   signOut: string;
   more: string;
+
+  // Flashcards
+  flashcardsTitle: string;
+  flashcardsSubtitle: string;
+  newDeck: string;
+  addCard: string;
+  deleteDeck: string;
+  deleteCard: string;
+  deleteDeckConfirm: string;
+  deleteCardConfirm: string;
+  quizMode: string;
+  exitQuiz: string;
+  tapToReveal: string;
+  tapToFlipBack: string;
+  rateRecall: string;
+  needsPractice: string;
+  gotItRight: string;
+  noDecks: string;
+  noDecksDesc: string;
+  reviewedCount: string;
+  correctCount: string;
+  createDeckTitle: string;
+  deckTitleLabel: string;
+  deckDescLabel: string;
+  questionLabel: string;
+  answerLabel: string;
+
+  // Chat & Telegram Sync
+  chatTitle: string;
+  chatSubtitle: string;
+  telegramSyncBadge: string;
+  telegramConnected: string;
+  telegramNotConnected: string;
+  sendQuestionPlaceholder: string;
+  sendBtn: string;
+  clearHistory: string;
+  noMessagesYet: string;
+  noMessagesDesc: string;
+  filterAll: string;
+  filterTelegram: string;
+  filterWeb: string;
 
   // Language Settings
   languageSettings: string;
@@ -131,9 +173,51 @@ export const translations: Record<Language, Translations> = {
     navFlashcards: 'Flashcards & Quiz',
     navHabits: 'Habit Tracker',
     navNotes: 'Quick Notes',
+    navChat: 'Telegram & AI Chat',
     navSettings: 'Settings & Bot',
     signOut: 'Sign Out',
     more: 'More',
+
+    // Flashcards
+    flashcardsTitle: 'Flashcards & Quiz',
+    flashcardsSubtitle: 'Active recall and revision decks.',
+    newDeck: 'New Deck',
+    addCard: 'Add Card',
+    deleteDeck: 'Delete Deck',
+    deleteCard: 'Delete Card',
+    deleteDeckConfirm: 'Are you sure you want to delete this deck and all of its flashcards? This action cannot be undone.',
+    deleteCardConfirm: 'Are you sure you want to delete this card?',
+    quizMode: 'Start Quiz',
+    exitQuiz: 'Exit Quiz',
+    tapToReveal: 'Tap to reveal answer',
+    tapToFlipBack: 'Tap to flip back',
+    rateRecall: 'Rate your recall',
+    needsPractice: 'Needs Practice',
+    gotItRight: 'Got It Right',
+    noDecks: 'No decks created yet',
+    noDecksDesc: 'Click "+ New Deck" to create your first flashcard deck.',
+    reviewedCount: 'Reviewed',
+    correctCount: 'Correct',
+    createDeckTitle: 'Create Flashcard Deck',
+    deckTitleLabel: 'Deck Title',
+    deckDescLabel: 'Description (Optional)',
+    questionLabel: 'Question',
+    answerLabel: 'Answer',
+
+    // Chat & Telegram Sync
+    chatTitle: 'AI Study Assistant & Telegram Chat',
+    chatSubtitle: 'Real-time conversation logs synced between Telegram and your dashboard.',
+    telegramSyncBadge: 'Telegram Sync Active',
+    telegramConnected: 'Connected to Telegram (@TSCTaskerBot)',
+    telegramNotConnected: 'Not linked to Telegram. Go to Settings to link.',
+    sendQuestionPlaceholder: 'Ask a question about your lessons, solve problems, or log tasks...',
+    sendBtn: 'Send',
+    clearHistory: 'Clear Chat History',
+    noMessagesYet: 'No messages yet',
+    noMessagesDesc: 'Send a message here or message @TSCTaskerBot on Telegram to start studying!',
+    filterAll: 'All Messages',
+    filterTelegram: 'Telegram',
+    filterWeb: 'Web',
 
     // Language Settings
     languageSettings: 'Language & Localization',
@@ -244,9 +328,51 @@ export const translations: Record<Language, Translations> = {
     navFlashcards: 'البطاقات والاختبارات',
     navHabits: 'متابعة العادات والنوم',
     navNotes: 'الملاحظات السريعة',
+    navChat: 'محادثة تيليجرام والذكاء الاصطناعي',
     navSettings: 'الإعدادات وبوت تيليجرام',
     signOut: 'تسجيل الخروج',
     more: 'المزيد',
+
+    // Flashcards
+    flashcardsTitle: 'البطاقات التعليمية والاختبارات',
+    flashcardsSubtitle: 'مجموعات الاسترجاع النشط والمراجعة السريعة.',
+    newDeck: 'مجموعة جديدة',
+    addCard: 'إضافة بطاقة',
+    deleteDeck: 'حذف المجموعة',
+    deleteCard: 'حذف البطاقة',
+    deleteDeckConfirm: 'هل أنت متأكد من رغبتك في حذف هذه المجموعة بجميع بطاقاتها؟ لا يمكن التراجع عن هذا الإجراء.',
+    deleteCardConfirm: 'هل أنت متأكد من رغبتك في حذف هذه البطاقة؟',
+    quizMode: 'بدء الاختبار',
+    exitQuiz: 'إنهاء الاختبار',
+    tapToReveal: 'اضغط لإظهار الإجابة',
+    tapToFlipBack: 'اضغط للعودة إلى السؤال',
+    rateRecall: 'قيّم مستوى استرجاعك للمعلومة',
+    needsPractice: 'تحتاج مراجعة',
+    gotItRight: 'أجبت بشكل صحيح',
+    noDecks: 'لا توجد مجموعات بطاقات مضافة حتى الآن',
+    noDecksDesc: 'اضغط على "+ مجموعة جديدة" لإنشاء أول مجموعة بطاقات تعليمية.',
+    reviewedCount: 'تمت المراجعة',
+    correctCount: 'إجابة صحيحة',
+    createDeckTitle: 'إنشاء مجموعة بطاقات جديدة',
+    deckTitleLabel: 'عنوان المجموعة',
+    deckDescLabel: 'الوصف (اختياري)',
+    questionLabel: 'السؤال',
+    answerLabel: 'الإجابة النموذجية',
+
+    // Chat & Telegram Sync
+    chatTitle: 'المساعد الذكي وسجل محادثات تيليجرام',
+    chatSubtitle: 'سجل محادثاتك مع المساعد الأكاديمي متزامن بالكامل بين تيليجرام ولوحة التحكم.',
+    telegramSyncBadge: 'مزامنة تيليجرام نشطة',
+    telegramConnected: 'متصل مع بوت تيليجرام (@TSCTaskerBot)',
+    telegramNotConnected: 'حسابك غير مربوط بتيليجرام بعد. توجه إلى الإعدادات للربط.',
+    sendQuestionPlaceholder: 'اسأل عن أي مسألة، قانون، تلخيص درس، أو سجل واجب...',
+    sendBtn: 'إرسال',
+    clearHistory: 'مسح سجل المحادثات',
+    noMessagesYet: 'لا توجد رسائل بعد',
+    noMessagesDesc: 'أرسل رسالة هنا أو تحدث مع @TSCTaskerBot في تيليجرام لبدء المذاكرة!',
+    filterAll: 'الكل',
+    filterTelegram: 'تيليجرام',
+    filterWeb: 'الويب',
 
     // Language Settings
     languageSettings: 'اللغة والتعريب',

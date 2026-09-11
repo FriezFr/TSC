@@ -126,6 +126,32 @@ async function downloadTelegramFile(fileId: string): Promise<{ buffer: Buffer; f
   }
 }
 
+// Record chat message to Supabase chat_messages table (for live Web Dashboard sync)
+async function recordChatMessage(
+  supabase: any,
+  params: {
+    userId: string;
+    role: 'user' | 'assistant';
+    content: string;
+    source?: 'telegram' | 'web' | 'whatsapp';
+    mediaType?: 'text' | 'document' | 'photo' | 'voice' | 'audio';
+    mediaName?: string;
+  }
+) {
+  try {
+    await supabase.from('chat_messages').insert({
+      user_id: params.userId,
+      role: params.role,
+      source: params.source || 'telegram',
+      content: params.content,
+      media_type: params.mediaType || 'text',
+      media_name: params.mediaName || null,
+    });
+  } catch (err) {
+    console.error('Error inserting chat message:', err);
+  }
+}
+
 export async function POST(req: NextRequest) {
   try {
     const update = (await req.json()) as TelegramUpdate;
@@ -246,6 +272,14 @@ export async function POST(req: NextRequest) {
         return NextResponse.json({ ok: true });
       }
 
+      await recordChatMessage(supabase, {
+        userId,
+        role: 'user',
+        content: rawText ? `${rawText}\n[Document: ${doc.file_name || 'Study PDF'}]` : `[Document: ${doc.file_name || 'Study PDF'}]`,
+        mediaType: 'document',
+        mediaName: doc.file_name,
+      });
+
       const mimeType = doc.mime_type || 'application/pdf';
       const aiResponse = await processUserMessageWithAI({
         text: rawText,
@@ -264,6 +298,12 @@ export async function POST(req: NextRequest) {
         tags: ['Document', 'PDF', 'AI-Summary'],
       });
 
+      await recordChatMessage(supabase, {
+        userId,
+        role: 'assistant',
+        content: aiResponse.reply,
+      });
+
       await sendTelegramReply(chatId, aiResponse.reply);
       return NextResponse.json({ ok: true });
     }
@@ -278,6 +318,13 @@ export async function POST(req: NextRequest) {
         return NextResponse.json({ ok: true });
       }
 
+      await recordChatMessage(supabase, {
+        userId,
+        role: 'user',
+        content: rawText ? `${rawText}\n[Photo/Diagram attached]` : `[Photo/Diagram attached]`,
+        mediaType: 'photo',
+      });
+
       const aiResponse = await processUserMessageWithAI({
         text: rawText,
         mediaPart: {
@@ -285,6 +332,12 @@ export async function POST(req: NextRequest) {
           data: downloaded.buffer.toString('base64'),
         },
         userProfile: profile,
+      });
+
+      await recordChatMessage(supabase, {
+        userId,
+        role: 'assistant',
+        content: aiResponse.reply,
       });
 
       await sendTelegramReply(chatId, aiResponse.reply);
@@ -301,6 +354,13 @@ export async function POST(req: NextRequest) {
         return NextResponse.json({ ok: true });
       }
 
+      await recordChatMessage(supabase, {
+        userId,
+        role: 'user',
+        content: rawText ? `${rawText}\n[Voice message]` : `[Voice message]`,
+        mediaType: 'voice',
+      });
+
       const mimeType = audioTarget!.mime_type || 'audio/ogg';
       const aiResponse = await processUserMessageWithAI({
         text: rawText,
@@ -316,23 +376,48 @@ export async function POST(req: NextRequest) {
         await executeDashboardAction(supabase, userId, aiResponse.action);
       }
 
+      await recordChatMessage(supabase, {
+        userId,
+        role: 'assistant',
+        content: aiResponse.reply,
+      });
+
       await sendTelegramReply(chatId, aiResponse.reply);
       return NextResponse.json({ ok: true });
     }
 
     // Case D: User sent Plain Text or Question or /start
     if (rawText.toLowerCase() === '/start' || rawText.toLowerCase() === 'start') {
-      await sendTelegramReply(
-        chatId,
+      const greeting =
         `👋 مرحباً ${profile?.full_name ? profile.full_name.split(' ')[0] : 'يا بطل'}!\n\n` +
-          'أنا مساعدك الذكي في البكالوريا المصرية (TSC AI) 🤖\n\n' +
-          '• اسألني أي سؤال في موادك (فيزياء، كيمياء، أحياء، رياضيات، إلخ).\n' +
-          '• ابعتلي أي ملف PDF أو صورة مسألة وهشرحهالك وألخصهالك فوراً.\n' +
-          '• سجل واجباتك وامتحاناتك ودرجاتك في أي وقت.\n\n' +
-          'قولي، بتذاكر إيه النهاردة؟'
-      );
+        'أنا مساعدك الذكي في البكالوريا المصرية (TSC AI) 🤖\n\n' +
+        '• اسألني أي سؤال في موادك (فيزياء، كيمياء، أحياء، رياضيات، إلخ).\n' +
+        '• ابعتلي أي ملف PDF أو صورة مسألة وهشرحهالك وألخصهالك فوراً.\n' +
+        '• سجل واجباتك وامتحاناتك ودرجاتك في أي وقت.\n\n' +
+        'قولي، بتذاكر إيه النهاردة؟';
+
+      await recordChatMessage(supabase, {
+        userId,
+        role: 'user',
+        content: rawText,
+      });
+
+      await recordChatMessage(supabase, {
+        userId,
+        role: 'assistant',
+        content: greeting,
+      });
+
+      await sendTelegramReply(chatId, greeting);
       return NextResponse.json({ ok: true });
     }
+
+    // Record user incoming message
+    await recordChatMessage(supabase, {
+      userId,
+      role: 'user',
+      content: rawText,
+    });
 
     // Fetch recent notes / study context so the AI remembers recently sent documents
     const { data: recentNotes } = await supabase
@@ -355,6 +440,13 @@ export async function POST(req: NextRequest) {
     if (aiResponse.action) {
       await executeDashboardAction(supabase, userId, aiResponse.action);
     }
+
+    // Record AI assistant reply for dashboard sync
+    await recordChatMessage(supabase, {
+      userId,
+      role: 'assistant',
+      content: aiResponse.reply,
+    });
 
     // ALWAYS reply with AI!
     await sendTelegramReply(chatId, aiResponse.reply);

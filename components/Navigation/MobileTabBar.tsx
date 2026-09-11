@@ -15,6 +15,7 @@ import {
   BrainCircuit,
   Sparkles,
   FileText,
+  MessageSquare,
   Settings,
   Globe,
 } from 'lucide-react';
@@ -35,6 +36,7 @@ const MAIN_TABS: TabDef[] = [
 ];
 
 const MORE_ITEMS: TabDef[] = [
+  { href: '/dashboard/chat', key: 'navChat', icon: MessageSquare },
   { href: '/dashboard/grades', key: 'navGrades', icon: Award },
   { href: '/dashboard/planner', key: 'navPlanner', icon: Layers },
   { href: '/dashboard/flashcards', key: 'navFlashcards', icon: BrainCircuit },
