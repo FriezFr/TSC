@@ -16,27 +16,41 @@ import {
   Sparkles,
   FileText,
   Settings,
+  Globe,
 } from 'lucide-react';
+import { useApp } from '@/lib/context';
+import { Translations } from '@/lib/i18n';
 
-const MAIN_TABS = [
-  { href: '/dashboard', label: 'Today', icon: Calendar },
-  { href: '/dashboard/assignments', label: 'Tasks', icon: CheckSquare },
-  { href: '/dashboard/exams', label: 'Exams', icon: Clock },
-  { href: '/dashboard/pomodoro', label: 'Focus', icon: Flame },
+interface TabDef {
+  href: string;
+  key: keyof Translations;
+  icon: React.ElementType;
+}
+
+const MAIN_TABS: TabDef[] = [
+  { href: '/dashboard', key: 'navToday', icon: Calendar },
+  { href: '/dashboard/assignments', key: 'navAssignments', icon: CheckSquare },
+  { href: '/dashboard/exams', key: 'navExams', icon: Clock },
+  { href: '/dashboard/pomodoro', key: 'navPomodoro', icon: Flame },
 ];
 
-const MORE_ITEMS = [
-  { href: '/dashboard/grades', label: 'Grade Tracker', icon: Award },
-  { href: '/dashboard/planner', label: 'Study Planner', icon: Layers },
-  { href: '/dashboard/flashcards', label: 'Flashcards & Quiz', icon: BrainCircuit },
-  { href: '/dashboard/habits', label: 'Habits & Sleep', icon: Sparkles },
-  { href: '/dashboard/notes', label: 'Quick Notes', icon: FileText },
-  { href: '/dashboard/settings', label: 'Settings & Bot', icon: Settings },
+const MORE_ITEMS: TabDef[] = [
+  { href: '/dashboard/grades', key: 'navGrades', icon: Award },
+  { href: '/dashboard/planner', key: 'navPlanner', icon: Layers },
+  { href: '/dashboard/flashcards', key: 'navFlashcards', icon: BrainCircuit },
+  { href: '/dashboard/habits', key: 'navHabits', icon: Sparkles },
+  { href: '/dashboard/notes', key: 'navNotes', icon: FileText },
+  { href: '/dashboard/settings', key: 'navSettings', icon: Settings },
 ];
 
 export default function MobileTabBar() {
   const pathname = usePathname();
+  const { language, setLanguage, t } = useApp();
   const [showMoreMenu, setShowMoreMenu] = useState(false);
+
+  const toggleLanguage = () => {
+    setLanguage(language === 'en' ? 'ar' : 'en');
+  };
 
   return (
     <>
@@ -49,13 +63,22 @@ export default function MobileTabBar() {
 
           <div className="relative bg-[#0c0c0c] rounded-t-2xl border-t border-white/10 p-6 space-y-4 max-h-[80vh] overflow-y-auto z-10">
             <div className="flex items-center justify-between pb-3 border-b border-white/10">
-              <h2 className="text-sm font-bold text-white">Menu</h2>
-              <button
-                onClick={() => setShowMoreMenu(false)}
-                className="w-7 h-7 rounded-lg bg-white/5 flex items-center justify-center text-neutral-400"
-              >
-                <X className="w-4 h-4" />
-              </button>
+              <h2 className="text-sm font-bold text-white">{t('more')}</h2>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={toggleLanguage}
+                  className="px-2.5 py-1 rounded-lg bg-white/10 text-xs font-bold text-white flex items-center gap-1.5 cursor-pointer"
+                >
+                  <Globe className="w-3.5 h-3.5" />
+                  <span>{language === 'en' ? 'العربية' : 'English'}</span>
+                </button>
+                <button
+                  onClick={() => setShowMoreMenu(false)}
+                  className="w-7 h-7 rounded-lg bg-white/5 flex items-center justify-center text-neutral-400 cursor-pointer"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
             </div>
 
             <div className="grid grid-cols-1 gap-2">
@@ -75,7 +98,7 @@ export default function MobileTabBar() {
                     }`}
                   >
                     <Icon className="w-4 h-4 text-white" />
-                    <span className="text-xs font-semibold">{item.label}</span>
+                    <span className="text-xs font-semibold">{t(item.key)}</span>
                   </Link>
                 );
               })}
@@ -103,19 +126,19 @@ export default function MobileTabBar() {
                 }`}
               >
                 <Icon className="w-4 h-4" />
-                <span className="text-[10px]">{tab.label}</span>
+                <span className="text-[10px] truncate max-w-[64px]">{t(tab.key)}</span>
               </Link>
             );
           })}
 
           <button
             onClick={() => setShowMoreMenu(true)}
-            className={`flex flex-col items-center gap-1 py-1 px-3 rounded-xl transition-all ${
+            className={`flex flex-col items-center gap-1 py-1 px-3 rounded-xl transition-all cursor-pointer ${
               showMoreMenu ? 'text-white' : 'text-neutral-500 hover:text-neutral-300'
             }`}
           >
             <Menu className="w-4 h-4" />
-            <span className="text-[10px]">More</span>
+            <span className="text-[10px]">{t('more')}</span>
           </button>
         </div>
       </nav>

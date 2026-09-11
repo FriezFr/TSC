@@ -15,6 +15,7 @@ import {
   UserProfile,
 } from './types';
 import { getSupabaseClient } from './supabase/client';
+import { Language, Translations, translations } from './i18n';
 
 interface AppContextType {
   user: User | null;
@@ -22,6 +23,10 @@ interface AppContextType {
   profile: UserProfile | null;
   updateProfile: (data: Partial<UserProfile>) => Promise<void>;
   signOut: () => Promise<void>;
+  // Language & i18n
+  language: Language;
+  setLanguage: (lang: Language) => void;
+  t: (key: keyof Translations, fallback?: string) => string;
   // Timetable
   timetable: TimetableSlot[];
   addTimetableSlot: (slot: Omit<TimetableSlot, 'id'>) => Promise<void>;
@@ -70,6 +75,45 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [authLoading, setAuthLoading] = useState<boolean>(true);
   const [profile, setProfile] = useState<UserProfile | null>(null);
+
+  // Language state (defaults to English 'en')
+  const [language, setLanguageState] = useState<Language>('en');
+
+  // Load language preference from localStorage on client
+  useEffect(() => {
+    try {
+      const stored = localStorage.getItem('app_language') as Language | null;
+      if (stored === 'en' || stored === 'ar') {
+        setLanguageState(stored);
+        document.documentElement.lang = stored;
+        document.documentElement.dir = stored === 'ar' ? 'rtl' : 'ltr';
+      } else {
+        document.documentElement.lang = 'en';
+        document.documentElement.dir = 'ltr';
+      }
+    } catch {
+      // ignore
+    }
+  }, []);
+
+  const setLanguage = (lang: Language) => {
+    setLanguageState(lang);
+    try {
+      localStorage.setItem('app_language', lang);
+      document.documentElement.lang = lang;
+      document.documentElement.dir = lang === 'ar' ? 'rtl' : 'ltr';
+    } catch {
+      // ignore
+    }
+  };
+
+  const t = useCallback(
+    (key: keyof Translations, fallback?: string): string => {
+      const dict = translations[language] || translations.en;
+      return dict[key] || fallback || (key as string);
+    },
+    [language]
+  );
 
   // Real data collections (initialized EMPTY - no placeholders)
   const [timetable, setTimetable] = useState<TimetableSlot[]>([]);
@@ -601,6 +645,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         profile,
         updateProfile,
         signOut,
+        language,
+        setLanguage,
+        t,
         timetable,
         addTimetableSlot,
         deleteTimetableSlot,

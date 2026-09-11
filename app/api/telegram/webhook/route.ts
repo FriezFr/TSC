@@ -29,7 +29,7 @@ async function sendTelegramReply(chatId: number, text: string) {
   }
 
   try {
-    await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
+    const res = await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -37,6 +37,10 @@ async function sendTelegramReply(chatId: number, text: string) {
         text,
       }),
     });
+    const data = await res.json();
+    if (!res.ok || !data.ok) {
+      console.error('Telegram sendMessage API error:', data);
+    }
   } catch (err) {
     console.error('Failed to send Telegram reply:', err);
   }
@@ -72,10 +76,12 @@ export async function POST(req: NextRequest) {
       .select('*')
       .eq('chat_id', chatId)
       .eq('is_linked', true)
-      .single();
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle();
 
     // 2. Handle linking flow if message is a link code or /start <code>
-    const linkMatch = rawText.match(/^\/?(start\s+)?([A-Za-z0-9]{6})$/i);
+    const linkMatch = rawText.match(/^\/?(start[\s=_]+)?([A-Za-z0-9]{6})$/i);
 
     if (linkMatch) {
       const code = linkMatch[2].toUpperCase();
@@ -85,13 +91,23 @@ export async function POST(req: NextRequest) {
         .from('telegram_links')
         .select('*')
         .eq('link_code', code)
-        .eq('is_linked', false)
-        .single();
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
 
       if (linkErr || !linkRecord) {
         await sendTelegramReply(
           chatId,
-          '❌ Invalid or expired sync code. Please generate a new 6-character code from your Thanaweya Dashboard Settings page.'
+          '❌ Invalid or expired sync code. Please check your 6-character code in your Baccalaureate Dashboard Settings page, or click "Generate Code".'
+        );
+        return NextResponse.json({ ok: true });
+      }
+
+      // If already linked to this user/chat
+      if (linkRecord.is_linked && linkRecord.chat_id === chatId) {
+        await sendTelegramReply(
+          chatId,
+          '✅ Your Telegram account is already linked to your Baccalaureate Dashboard! You can send assignments, exams, grades, habits, or notes anytime.'
         );
         return NextResponse.json({ ok: true });
       }
@@ -108,16 +124,27 @@ export async function POST(req: NextRequest) {
 
       await sendTelegramReply(
         chatId,
-        '🎉 Successfully linked to your Thanaweya Dashboard!\n\nYou can now send me anything you want to remember:\n• Assignments: "واجب فيزياء صفحة 30 الإثنين"\n• Exams: "امتحان كيمياء باب أول يوم 20 مارس"\n• Grades: "جبت 56 من 60 في امتحان العربي"\n• Habits: "نمت 7 ساعات"\n• Notes: "ملاحظة: قانون لنز يعاكس التغير في الفيض"'
+        '🎉 Successfully linked to your Baccalaureate Dashboard (البكالوريا المصرية)!\n\nYou can now send me anything you want to remember:\n• Assignments: "Physics HW page 30 Monday" / "واجب فيزياء صفحة 30 الإثنين"\n• Exams: "Chemistry exam March 20" / "امتحان كيمياء 20 مارس"\n• Grades: "Scored 56 out of 60 in Arabic" / "جبت 56 من 60 في العربي"\n• Habits: "Slept 7.5 hours" / "نمت 7 ساعات"\n• Notes: "Remember: Study chapter 2 tonight"'
       );
       return NextResponse.json({ ok: true });
+    }
+
+    // If already linked and user sends /start or start without code
+    if (rawText.toLowerCase() === '/start' || rawText.toLowerCase() === 'start') {
+      if (existingLink) {
+        await sendTelegramReply(
+          chatId,
+          '👋 You are linked to your Baccalaureate Dashboard!\n\nSend me anything anytime:\n• Assignments & Homework\n• Exam & quiz dates\n• Scores & grades\n• Daily habits & sleep\n• Quick notes & revision reminders'
+        );
+        return NextResponse.json({ ok: true });
+      }
     }
 
     // If chat_id is not linked yet
     if (!existingLink) {
       await sendTelegramReply(
         chatId,
-        '👋 Welcome to Thanaweya Memory Bot!\n\nYour Telegram account is not linked to any Thanaweya Dashboard yet.\n\n1. Open your Thanaweya Dashboard\n2. Go to Settings -> Telegram Bot\n3. Click "Generate Link Code"\n4. Send that 6-digit code here to link your account!'
+        '👋 Welcome to the Egyptian Baccalaureate Memory Bot!\n\nYour Telegram account is not linked to any dashboard yet.\n\nQuick setup:\n1. Open your Dashboard: https://tsctasker.vercel.app\n2. Go to Settings -> Telegram Bot\n3. Click "Generate Code"\n4. Send `/start YOUR_CODE` here to link your account!'
       );
       return NextResponse.json({ ok: true });
     }

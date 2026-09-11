@@ -14,9 +14,12 @@ import {
   LogOut,
   RefreshCw,
   Code,
+  Languages,
+  Globe,
 } from 'lucide-react';
 import { getSupabaseClient } from '@/lib/supabase/client';
 import { useRouter } from 'next/navigation';
+import { BACCALAUREATE_TRACKS } from '@/lib/types';
 
 export default function SettingsPage() {
   const router = useRouter();
@@ -27,6 +30,9 @@ export default function SettingsPage() {
     generateTelegramCode,
     telegramLinked,
     signOut,
+    language,
+    setLanguage,
+    t,
   } = useApp();
 
   const [copiedCode, setCopiedCode] = useState(false);
@@ -36,7 +42,7 @@ export default function SettingsPage() {
   const [isGenerating, setIsGenerating] = useState(false);
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
 
-  const host = typeof window !== 'undefined' ? window.location.origin : 'https://thanaweya-dashboard.vercel.app';
+  const host = typeof window !== 'undefined' ? window.location.origin : 'https://tsctasker.vercel.app';
   const webhookUrl = `${host}/api/telegram/webhook`;
   const setWebhookCurl = `https://api.telegram.org/bot8978477850:AAGzHRPqL-x2ftO-r_Nx-1dhtG6sxzC6ME4/setWebhook?url=${webhookUrl}`;
 
@@ -68,11 +74,11 @@ export default function SettingsPage() {
     try {
       const { error } = await supabase.auth.updateUser({ password: newPassword });
       if (error) throw error;
-      setPasswordStatus('Password updated successfully.');
+      setPasswordStatus(language === 'ar' ? 'تم تحديث كلمة المرور بنجاح.' : 'Password updated successfully.');
       setNewPassword('');
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'Error updating password';
-      setPasswordStatus(`Failed: ${msg}`);
+      setPasswordStatus(`${language === 'ar' ? 'فشل التحديث' : 'Failed'}: ${msg}`);
     }
   };
 
@@ -92,17 +98,76 @@ export default function SettingsPage() {
 
   return (
     <div className="space-y-6">
+      {/* Header */}
       <div>
         <h1 className="text-2xl font-bold text-white tracking-tight">
-          Settings
+          {t('settingsTitle')}
         </h1>
         <p className="text-xs text-neutral-400 mt-1">
-          Account security and Telegram Memory Bot integration.
+          {t('settingsDesc')}
         </p>
       </div>
 
+      {/* Language & Localization Card */}
+      <GlassCard className="p-6">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-white text-black flex items-center justify-center font-bold">
+              <Languages className="w-5 h-5" />
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <h2 className="text-base font-bold text-white">
+                  {t('languageSettings')}
+                </h2>
+                <span className="px-2 py-0.5 rounded-full text-[10px] font-mono font-bold bg-white/10 text-neutral-300">
+                  {language === 'en' ? 'EN' : 'AR'}
+                </span>
+              </div>
+              <p className="text-xs text-neutral-400 mt-0.5">
+                {t('languageDesc')}
+              </p>
+            </div>
+          </div>
+
+          {/* Dual Language Switcher Buttons */}
+          <div className="grid grid-cols-2 p-1 rounded-xl bg-[#141414] border border-white/10 w-full sm:w-72">
+            <button
+              type="button"
+              onClick={() => setLanguage('en')}
+              className={`py-2 px-3 text-xs font-bold rounded-lg transition-all flex items-center justify-center gap-2 cursor-pointer ${
+                language === 'en'
+                  ? 'bg-white text-black shadow-md'
+                  : 'text-neutral-400 hover:text-white'
+              }`}
+            >
+              <span>🇬🇧</span>
+              <span>English</span>
+              {language === 'en' && (
+                <span className="text-[9px] px-1 py-0.2 rounded bg-black/10 font-normal">
+                  {t('defaultBadge')}
+                </span>
+              )}
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setLanguage('ar')}
+              className={`py-2 px-3 text-xs font-bold rounded-lg transition-all flex items-center justify-center gap-2 cursor-pointer ${
+                language === 'ar'
+                  ? 'bg-white text-black shadow-md'
+                  : 'text-neutral-400 hover:text-white'
+              }`}
+            >
+              <span>🇪🇬</span>
+              <span>العربية</span>
+            </button>
+          </div>
+        </div>
+      </GlassCard>
+
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Telegram Bot */}
+        {/* Telegram Bot & Student Profile (2 cols) */}
         <div className="lg:col-span-2 space-y-6">
           <GlassCard className="p-6 space-y-6">
             <div className="flex items-start justify-between">
@@ -112,10 +177,10 @@ export default function SettingsPage() {
                 </div>
                 <div>
                   <h2 className="text-base font-bold text-white">
-                    Telegram Memory Bot
+                    {t('telegramBotTitle')}
                   </h2>
                   <p className="text-xs text-neutral-400 mt-0.5">
-                    Send voice or text messages to your bot for Gemini to parse and log.
+                    {t('telegramBotDesc')}
                   </p>
                 </div>
               </div>
@@ -127,57 +192,61 @@ export default function SettingsPage() {
                     : 'bg-[#141414] text-neutral-400 border border-white/10'
                 }`}
               >
-                {telegramLinked ? 'Linked' : 'Not Linked'}
+                {telegramLinked ? t('statusLinked') : t('statusNotLinked')}
               </div>
             </div>
 
             {/* Link Code */}
             <div className="p-4 rounded-xl bg-[#111111] border border-white/10 space-y-3">
               <div className="flex items-center justify-between">
-                <span className="text-xs font-bold text-neutral-300">Your One-Time Link Code</span>
+                <span className="text-xs font-bold text-neutral-300">{t('linkCodeLabel')}</span>
                 <button
                   onClick={handleGenerateNewCode}
                   disabled={isGenerating}
                   className="text-xs text-neutral-400 hover:text-white flex items-center gap-1 cursor-pointer"
                 >
                   <RefreshCw className={`w-3.5 h-3.5 ${isGenerating ? 'animate-spin' : ''}`} />
-                  Generate Code
+                  {t('generateCode')}
                 </button>
               </div>
 
               <div className="flex items-center gap-3">
                 <div className="flex-1 glass-input py-2.5 px-4 rounded-xl text-center text-2xl sm:text-3xl font-bold font-mono tracking-widest text-white select-all">
-                  {telegramCode || 'Click Generate'}
+                  {telegramCode || (language === 'ar' ? 'اضغط توليد رمز' : 'Click Generate')}
                 </div>
 
                 <button
                   onClick={handleCopyCode}
                   disabled={!telegramCode}
                   className="p-3 rounded-xl glass-button-primary shrink-0 cursor-pointer disabled:opacity-50"
-                  title="Copy code"
+                  title={t('copyCode')}
                 >
                   {copiedCode ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
                 </button>
               </div>
 
               <p className="text-[11px] text-neutral-400">
-                Send <code className="text-white font-mono">/start {telegramCode || '<code>'}</code> to your bot in Telegram to link.
+                {language === 'ar' ? (
+                  <>أرسل <code className="text-white font-mono">/start {telegramCode || '<code>'}</code> إلى البوت في تيليجرام لربط حسابك.</>
+                ) : (
+                  <>Send <code className="text-white font-mono">/start {telegramCode || '<code>'}</code> to @TSCTaskerBot in Telegram to link.</>
+                )}
               </p>
             </div>
 
-            {/* Webhook */}
+            {/* Webhook Endpoint */}
             <div className="p-3.5 rounded-xl bg-[#111111] border border-white/10 space-y-2">
               <div className="flex items-center justify-between">
                 <span className="text-xs font-bold text-neutral-300 flex items-center gap-1.5">
                   <Code className="w-3.5 h-3.5" />
-                  Webhook Endpoint
+                  {t('webhookEndpoint')}
                 </span>
                 <button
                   onClick={handleCopyWebhook}
                   className="text-xs text-neutral-400 hover:text-white flex items-center gap-1 cursor-pointer"
                 >
                   {copiedWebhook ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
-                  <span>Copy</span>
+                  <span>{copiedWebhook ? t('copied') : t('copyWebhook')}</span>
                 </button>
               </div>
               <div className="p-2 rounded-lg bg-black font-mono text-[11px] text-neutral-300 break-all select-all">
@@ -189,12 +258,12 @@ export default function SettingsPage() {
           {/* Profile Settings */}
           {profile && (
             <GlassCard className="p-5 space-y-4">
-              <h3 className="text-sm font-bold text-white">Student Profile</h3>
+              <h3 className="text-sm font-bold text-white">{t('studentProfile')}</h3>
 
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                 <div>
                   <label className="block text-xs font-medium text-neutral-300 mb-1">
-                    Name
+                    {t('fullName')}
                   </label>
                   <input
                     type="text"
@@ -206,23 +275,24 @@ export default function SettingsPage() {
 
                 <div>
                   <label className="block text-xs font-medium text-neutral-300 mb-1">
-                    المسار التخصصي (Track)
+                    {t('trackLabel')}
                   </label>
                   <select
                     value={profile.study_division}
                     onChange={(e) => updateProfile({ study_division: e.target.value as any })}
                     className="w-full glass-input px-3 py-2 rounded-xl text-xs bg-[#0d0d0d] text-white"
                   >
-                    <option value="medical_life_sciences">مسار الطب وعلوم الحياة (Medical)</option>
-                    <option value="engineering_cs">مسار الهندسة وعلوم الحاسب (Engineering & CS)</option>
-                    <option value="business">مسار الأعمال والإدارة (Business)</option>
-                    <option value="humanities_arts">مسار الآداب والعلوم الإنسانية (Humanities)</option>
+                    {BACCALAUREATE_TRACKS.map((trk) => (
+                      <option key={trk.id} value={trk.id}>
+                        {language === 'ar' ? `${trk.name} (${trk.en})` : `${trk.en} (${trk.name})`}
+                      </option>
+                    ))}
                   </select>
                 </div>
 
                 <div>
                   <label className="block text-xs font-medium text-neutral-300 mb-1">
-                    Target %
+                    {t('targetPercentage')}
                   </label>
                   <input
                     type="number"
@@ -239,12 +309,12 @@ export default function SettingsPage() {
           )}
         </div>
 
-        {/* Security / Account Actions */}
+        {/* Security / Account Actions (1 col) */}
         <div className="space-y-6">
           <GlassCard className="p-5 space-y-3">
             <div className="flex items-center gap-2">
               <KeyRound className="w-4 h-4 text-white" />
-              <h3 className="text-sm font-bold text-white">Change Password</h3>
+              <h3 className="text-sm font-bold text-white">{t('changePassword')}</h3>
             </div>
 
             {passwordStatus && (
@@ -266,20 +336,20 @@ export default function SettingsPage() {
                 type="submit"
                 className="w-full py-2 rounded-xl glass-button-secondary text-xs font-semibold cursor-pointer"
               >
-                Update Password
+                {t('updatePassword')}
               </button>
             </form>
           </GlassCard>
 
           <GlassCard className="p-5 space-y-3 border border-red-900/30">
-            <h3 className="text-sm font-bold text-red-400">Account</h3>
+            <h3 className="text-sm font-bold text-red-400">{t('accountSection')}</h3>
 
             <button
               onClick={handleLogout}
               className="w-full py-2 rounded-xl bg-[#111111] hover:bg-[#1a1a1a] text-neutral-300 text-xs font-semibold flex items-center justify-center gap-1.5 transition-all cursor-pointer"
             >
               <LogOut className="w-3.5 h-3.5" />
-              <span>Log Out</span>
+              <span>{t('signOut')}</span>
             </button>
 
             <button
@@ -287,7 +357,7 @@ export default function SettingsPage() {
               className="w-full py-2 rounded-xl bg-red-950/30 hover:bg-red-950/60 text-red-300 text-xs font-semibold flex items-center justify-center gap-1.5 transition-all cursor-pointer"
             >
               <Trash2 className="w-3.5 h-3.5" />
-              <span>Delete Account</span>
+              <span>{t('deleteAccount')}</span>
             </button>
           </GlassCard>
         </div>
@@ -296,22 +366,22 @@ export default function SettingsPage() {
       <GlassModal
         isOpen={isDeleteModalOpen}
         onClose={() => setIsDeleteModalOpen(false)}
-        title="Delete Account"
+        title={t('deleteAccount')}
       >
         <div className="space-y-4 text-xs text-neutral-300">
-          <p>Are you sure you want to sign out and clear your session?</p>
+          <p>{t('deleteAccountConfirm')}</p>
           <div className="flex justify-end gap-2 pt-2">
             <button
               onClick={() => setIsDeleteModalOpen(false)}
               className="px-4 py-2 rounded-xl glass-button-secondary text-xs cursor-pointer"
             >
-              Cancel
+              {t('cancel')}
             </button>
             <button
               onClick={handleDeleteAccount}
               className="px-4 py-2 rounded-xl bg-red-600 text-white font-bold text-xs cursor-pointer"
             >
-              Confirm
+              {t('confirm')}
             </button>
           </div>
         </div>

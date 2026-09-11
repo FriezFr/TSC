@@ -30,6 +30,8 @@ export default function TodayViewPage() {
     habitLogs,
     toggleHabitToday,
     sessions,
+    language,
+    t,
   } = useApp();
 
   const [isTimetableModalOpen, setIsTimetableModalOpen] = useState(false);
@@ -91,15 +93,43 @@ export default function TodayViewPage() {
     setIsTimetableModalOpen(false);
   };
 
-  const dayNames = [
-    'Saturday (السبت)',
-    'Sunday (الأحد)',
-    'Monday (الإثنين)',
-    'Tuesday (الثلاثاء)',
-    'Wednesday (الأربعاء)',
-    'Thursday (الخميس)',
-    'Friday (الجمعة)',
+  const dayNamesEn = [
+    'Saturday',
+    'Sunday',
+    'Monday',
+    'Tuesday',
+    'Wednesday',
+    'Thursday',
+    'Friday',
   ];
+
+  const dayNamesAr = [
+    'السبت (Saturday)',
+    'الأحد (Sunday)',
+    'الإثنين (Monday)',
+    'الثلاثاء (Tuesday)',
+    'الأربعاء (Wednesday)',
+    'الخميس (Thursday)',
+    'الجمعة (Friday)',
+  ];
+
+  const currentDayNames = language === 'ar' ? dayNamesAr : dayNamesEn;
+
+  const getTrackDisplayName = () => {
+    if (!profile?.study_division) return 'Baccalaureate Track';
+    switch (profile.study_division) {
+      case 'medical_life_sciences':
+        return language === 'ar' ? 'الطب وعلوم الحياة (Medical)' : 'Medical & Life Sciences (الطب وعلوم الحياة)';
+      case 'engineering_cs':
+        return language === 'ar' ? 'الهندسة وعلوم الحاسب (Engineering & CS)' : 'Engineering & CS (الهندسة وعلوم الحاسب)';
+      case 'business':
+        return language === 'ar' ? 'الأعمال والإدارة (Business)' : 'Business & Economics (الأعمال والإدارة)';
+      case 'humanities_arts':
+        return language === 'ar' ? 'الآداب والعلوم الإنسانية (Humanities)' : 'Humanities & Arts (الآداب والعلوم الإنسانية)';
+      default:
+        return profile.study_division;
+    }
+  };
 
   return (
     <div className="space-y-6">
@@ -108,19 +138,13 @@ export default function TodayViewPage() {
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div>
             <span className="text-xs font-mono text-neutral-400 block mb-1">
-              {dayNames[mappedDayIndex]}
+              {currentDayNames[mappedDayIndex]}
             </span>
             <h1 className="text-2xl font-bold text-white tracking-tight">
-              {profile?.full_name ? `Welcome back, ${profile.full_name.split(' ')[0]}` : 'Today Overview'}
+              {profile?.full_name ? `${t('welcomeBack')}, ${profile.full_name.split(' ')[0]}` : t('todayOverview')}
             </h1>
             <p className="text-xs text-neutral-400 mt-1">
-              المسار: {
-                profile?.study_division === 'medical_life_sciences' ? 'الطب وعلوم الحياة (Medical)' :
-                profile?.study_division === 'engineering_cs' ? 'الهندسة وعلوم الحاسب (Engineering & CS)' :
-                profile?.study_division === 'business' ? 'الأعمال والإدارة (Business)' :
-                profile?.study_division === 'humanities_arts' ? 'الآداب والعلوم الإنسانية (Humanities)' :
-                profile?.study_division || 'البكالوريا'
-              } • الهدف: {profile?.target_percentage || 95}%
+              {t('trackLabel')}: {getTrackDisplayName()} • {t('targetGoal')}: {profile?.target_percentage || 95}%
             </p>
           </div>
 
@@ -128,7 +152,7 @@ export default function TodayViewPage() {
             onClick={() => setIsTimetableModalOpen(true)}
             className="px-4 py-2 rounded-xl glass-button-primary text-xs font-bold self-start sm:self-center cursor-pointer"
           >
-            + Add Class
+            {t('addClass')}
           </button>
         </div>
       </GlassCard>
@@ -137,47 +161,49 @@ export default function TodayViewPage() {
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
         <Link href="/dashboard/exams">
           <GlassCard interactive className="p-4">
-            <span className="text-xs text-neutral-400 block mb-1">Next Exam</span>
+            <span className="text-xs text-neutral-400 block mb-1">{t('nextExam')}</span>
             <span className="text-2xl font-bold text-white font-mono">
               {daysUntilNextExam !== null ? `${daysUntilNextExam}d` : '-'}
             </span>
             <span className="block text-[11px] text-neutral-500 mt-1 truncate">
-              {nextExam?.subject || 'No exams scheduled'}
+              {nextExam?.subject || (language === 'ar' ? 'لا توجد امتحانات مجدولة' : 'No exams scheduled')}
             </span>
           </GlassCard>
         </Link>
 
         <Link href="/dashboard/pomodoro">
           <GlassCard interactive className="p-4">
-            <span className="text-xs text-neutral-400 block mb-1">Focus Today</span>
+            <span className="text-xs text-neutral-400 block mb-1">{t('focusToday')}</span>
             <span className="text-2xl font-bold text-white font-mono">
               {totalFocusMinutes}m
             </span>
             <span className="block text-[11px] text-neutral-500 mt-1">
-              {todaySessions.length} sessions completed
+              {todaySessions.length} {language === 'ar' ? 'جلسات مكتملة' : 'sessions completed'}
             </span>
           </GlassCard>
         </Link>
 
         <Link href="/dashboard/assignments">
           <GlassCard interactive className="p-4">
-            <span className="text-xs text-neutral-400 block mb-1">Due Today</span>
+            <span className="text-xs text-neutral-400 block mb-1">{t('dueToday')}</span>
             <span className="text-2xl font-bold text-white font-mono">
               {assignmentsDueToday.length}
             </span>
             <span className="block text-[11px] text-neutral-500 mt-1">
-              {assignmentsDueToday.filter((a) => a.is_completed).length} completed
+              {assignmentsDueToday.filter((a) => a.is_completed).length} {language === 'ar' ? 'مكتملة' : 'completed'}
             </span>
           </GlassCard>
         </Link>
 
         <Link href="/dashboard/grades">
           <GlassCard interactive className="p-4">
-            <span className="text-xs text-neutral-400 block mb-1">Target Goal</span>
+            <span className="text-xs text-neutral-400 block mb-1">{t('targetGoal')}</span>
             <span className="text-2xl font-bold text-white font-mono">
               {profile?.target_percentage || 95}%
             </span>
-            <span className="block text-[11px] text-neutral-500 mt-1">هدف البكالوريا</span>
+            <span className="block text-[11px] text-neutral-500 mt-1">
+              {language === 'ar' ? 'هدف النسبة المئوية' : 'Target Baccalaureate %'}
+            </span>
           </GlassCard>
         </Link>
       </div>
@@ -187,14 +213,16 @@ export default function TodayViewPage() {
         {/* Classes (2 cols) */}
         <div className="lg:col-span-2 space-y-4">
           <div className="flex items-center justify-between">
-            <h2 className="text-sm font-bold text-white">Today's Classes</h2>
-            <span className="text-xs text-neutral-500 font-mono">{todayClasses.length} scheduled</span>
+            <h2 className="text-sm font-bold text-white">{t('todayClasses')}</h2>
+            <span className="text-xs text-neutral-500 font-mono">
+              {todayClasses.length} {t('scheduledClasses')}
+            </span>
           </div>
 
           <GlassCard className="p-4 space-y-2">
             {todayClasses.length === 0 ? (
               <div className="text-center py-8 text-neutral-500 text-xs">
-                No classes scheduled for today. Click "+ Add Class" to set your timetable.
+                {t('noClassesToday')}
               </div>
             ) : (
               todayClasses.map((item) => (
@@ -215,7 +243,7 @@ export default function TodayViewPage() {
                     </span>
                     <button
                       onClick={() => deleteTimetableSlot(item.id)}
-                      className="opacity-0 group-hover:opacity-100 text-neutral-500 hover:text-red-400 p-1 cursor-pointer"
+                      className="opacity-0 group-hover:opacity-100 text-neutral-500 hover:text-red-400 p-1 cursor-pointer transition-opacity"
                     >
                       <Trash2 className="w-3.5 h-3.5" />
                     </button>
@@ -228,7 +256,7 @@ export default function TodayViewPage() {
           {/* Assignments Due Today */}
           {assignmentsDueToday.length > 0 && (
             <div className="space-y-2 pt-2">
-              <h3 className="text-xs font-bold text-neutral-300">Assignments Due Today</h3>
+              <h3 className="text-xs font-bold text-neutral-300">{t('assignmentsDueToday')}</h3>
               {assignmentsDueToday.map((a) => (
                 <div
                   key={a.id}
@@ -260,7 +288,7 @@ export default function TodayViewPage() {
         {/* Quick To-Do (1 col) */}
         <div className="space-y-4">
           <div className="flex items-center justify-between">
-            <h2 className="text-sm font-bold text-white">Daily Tasks</h2>
+            <h2 className="text-sm font-bold text-white">{t('dailyTasks')}</h2>
             <span className="text-xs text-neutral-500">
               {quickTasks.filter((t) => t.done).length}/{quickTasks.length}
             </span>
@@ -272,6 +300,7 @@ export default function TodayViewPage() {
                 type="text"
                 value={quickTaskText}
                 onChange={(e) => setQuickTaskText(e.target.value)}
+                placeholder={language === 'ar' ? 'أضف مهمة سريعة...' : 'Add quick task...'}
                 className="flex-1 glass-input px-3 py-1.5 rounded-lg text-xs"
               />
               <button
@@ -285,7 +314,7 @@ export default function TodayViewPage() {
             <div className="space-y-1.5">
               {quickTasks.length === 0 ? (
                 <p className="text-[11px] text-neutral-500 text-center py-4">
-                  No quick tasks added for today.
+                  {t('noTasksToday')}
                 </p>
               ) : (
                 quickTasks.map((t) => (
@@ -316,7 +345,7 @@ export default function TodayViewPage() {
             {/* Habits Today */}
             {habits.length > 0 && (
               <div className="pt-3 border-t border-white/10 space-y-2">
-                <h4 className="text-[11px] font-bold text-neutral-400">Daily Habits</h4>
+                <h4 className="text-[11px] font-bold text-neutral-400">{t('dailyHabits')}</h4>
                 {habits.slice(0, 3).map((h) => {
                   const log = habitLogs.find((l) => l.habit_id === h.id && l.date === todayStr);
                   const isDone = Boolean(log && log.completed);
@@ -333,7 +362,7 @@ export default function TodayViewPage() {
                           isDone ? 'bg-white text-black font-bold' : 'text-neutral-500'
                         }`}
                       >
-                        {isDone ? 'Done' : 'Pending'}
+                        {isDone ? t('done') : t('pending')}
                       </span>
                     </div>
                   );
@@ -348,17 +377,17 @@ export default function TodayViewPage() {
       <GlassModal
         isOpen={isTimetableModalOpen}
         onClose={() => setIsTimetableModalOpen(false)}
-        title="Add Class to Timetable"
+        title={t('addClassTitle')}
       >
         <form onSubmit={handleAddSlot} className="space-y-4">
           <div>
-            <label className="block text-xs font-medium text-neutral-300 mb-1">Day</label>
+            <label className="block text-xs font-medium text-neutral-300 mb-1">{t('dayLabel')}</label>
             <select
               value={newDay}
               onChange={(e) => setNewDay(Number(e.target.value))}
               className="w-full glass-input px-3 py-2 rounded-xl text-xs bg-[#0d0d0d] text-white"
             >
-              {dayNames.map((d, i) => (
+              {currentDayNames.map((d, i) => (
                 <option key={i} value={i}>
                   {d}
                 </option>
@@ -367,7 +396,7 @@ export default function TodayViewPage() {
           </div>
 
           <div>
-            <label className="block text-xs font-medium text-neutral-300 mb-1">Subject</label>
+            <label className="block text-xs font-medium text-neutral-300 mb-1">{t('subjectLabel')}</label>
             <input
               type="text"
               required
@@ -379,7 +408,7 @@ export default function TodayViewPage() {
 
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="block text-xs font-medium text-neutral-300 mb-1">Start Time</label>
+              <label className="block text-xs font-medium text-neutral-300 mb-1">{t('startTimeLabel')}</label>
               <input
                 type="time"
                 required
@@ -389,7 +418,7 @@ export default function TodayViewPage() {
               />
             </div>
             <div>
-              <label className="block text-xs font-medium text-neutral-300 mb-1">End Time</label>
+              <label className="block text-xs font-medium text-neutral-300 mb-1">{t('endTimeLabel')}</label>
               <input
                 type="time"
                 required
@@ -402,7 +431,7 @@ export default function TodayViewPage() {
 
           <div>
             <label className="block text-xs font-medium text-neutral-300 mb-1">
-              Teacher / Location (Optional)
+              {t('teacherLocationLabel')}
             </label>
             <input
               type="text"
@@ -416,15 +445,15 @@ export default function TodayViewPage() {
             <button
               type="button"
               onClick={() => setIsTimetableModalOpen(false)}
-              className="px-4 py-2 rounded-xl glass-button-secondary text-xs"
+              className="px-4 py-2 rounded-xl glass-button-secondary text-xs cursor-pointer"
             >
-              Cancel
+              {t('cancel')}
             </button>
             <button
               type="submit"
-              className="px-5 py-2 rounded-xl glass-button-primary text-xs font-bold"
+              className="px-5 py-2 rounded-xl glass-button-primary text-xs font-bold cursor-pointer"
             >
-              Save Class
+              {t('saveClass')}
             </button>
           </div>
         </form>

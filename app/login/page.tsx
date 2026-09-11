@@ -17,6 +17,7 @@ import {
   Target,
   ShieldCheck,
   GraduationCap,
+  Globe,
 } from 'lucide-react';
 import { useApp } from '@/lib/context';
 import { BaccalaureateTrack, BACCALAUREATE_TRACKS } from '@/lib/types';
@@ -25,7 +26,7 @@ type AuthMode = 'signin' | 'signup';
 
 export default function AuthPage() {
   const router = useRouter();
-  const { user, authLoading } = useApp();
+  const { user, authLoading, language, setLanguage, t } = useApp();
   const [mode, setMode] = useState<AuthMode>('signin');
 
   // Form Fields
@@ -56,6 +57,10 @@ export default function AuthPage() {
     setSuccessMsg('');
   };
 
+  const toggleLanguage = () => {
+    setLanguage(language === 'en' ? 'ar' : 'en');
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMsg('');
@@ -63,7 +68,11 @@ export default function AuthPage() {
 
     const supabase = getSupabaseClient();
     if (!supabase) {
-      setErrorMsg('Database connection is not configured. Please check your Supabase environment variables in Vercel.');
+      setErrorMsg(
+        language === 'ar'
+          ? 'الاتصال بقاعدة البيانات غير مهيأ. يرجى التحقق من متغيرات البيئة.'
+          : 'Database connection is not configured. Please check your Supabase environment variables.'
+      );
       return;
     }
 
@@ -73,13 +82,23 @@ export default function AuthPage() {
       if (mode === 'signup') {
         // Client-side validations
         if (password.length < 6) {
-          throw new Error('Password must be at least 6 characters long.');
+          throw new Error(
+            language === 'ar'
+              ? 'يجب أن تتكون كلمة المرور من 6 أحرف على الأقل.'
+              : 'Password must be at least 6 characters long.'
+          );
         }
         if (password !== confirmPassword) {
-          throw new Error('Passwords do not match. Please verify your password.');
+          throw new Error(
+            language === 'ar'
+              ? 'كلمتا المرور غير متطابقتين. يرجى التأكد وإعادة المحاولة.'
+              : 'Passwords do not match. Please verify your password.'
+          );
         }
         if (!fullName.trim()) {
-          throw new Error('Please enter your full name.');
+          throw new Error(
+            language === 'ar' ? 'يرجى إدخال اسم الطالب بالكامل.' : 'Please enter your full name.'
+          );
         }
 
         const parsedTarget = targetPercentage ? parseFloat(targetPercentage) : 95.0;
@@ -98,17 +117,23 @@ export default function AuthPage() {
 
         if (error) {
           if (error.message.toLowerCase().includes('already registered')) {
-            throw new Error('An account with this email already exists. Please SIGN IN.');
+            throw new Error(
+              language === 'ar'
+                ? 'يوجد حساب مسجل بالفعل بهذا البريد الإلكتروني. يرجى تسجيل الدخول.'
+                : 'An account with this email already exists. Please SIGN IN.'
+            );
           }
           throw error;
         }
 
         if (data.session) {
-          // Direct session login
           router.push('/dashboard');
         } else {
-          // Email confirmation enabled in Supabase
-          setSuccessMsg('Account created successfully! If email verification is enabled, check your inbox to confirm, or click SIGN IN below.');
+          setSuccessMsg(
+            language === 'ar'
+              ? 'تم إنشاء الحساب بنجاح! تفقد بريدك الإلكتروني لتأكيد التسجيل، أو سجّل الدخول أدناه.'
+              : 'Account created successfully! Check your inbox to confirm if required, or sign in below.'
+          );
           setMode('signin');
           setPassword('');
           setConfirmPassword('');
@@ -123,10 +148,18 @@ export default function AuthPage() {
         if (error) {
           const lower = error.message.toLowerCase();
           if (lower.includes('invalid login credentials') || lower.includes('invalid grant')) {
-            throw new Error('Invalid email or password. If you do not have an account yet, click SIGN UP.');
+            throw new Error(
+              language === 'ar'
+                ? 'البريد الإلكتروني أو كلمة المرور غير صحيحة.'
+                : 'Invalid email or password. If you do not have an account yet, click SIGN UP.'
+            );
           }
           if (lower.includes('email not confirmed')) {
-            throw new Error('Your email has not been confirmed yet. Please check your inbox or spam folder.');
+            throw new Error(
+              language === 'ar'
+                ? 'لم يتم تأكيد بريدك الإلكتروني بعد. يرجى مراجعة بريدك الإلكتروني.'
+                : 'Your email has not been confirmed yet. Please check your inbox or spam folder.'
+            );
           }
           throw error;
         }
@@ -136,7 +169,12 @@ export default function AuthPage() {
         }
       }
     } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : 'Authentication failed. Please try again.';
+      const message =
+        err instanceof Error
+          ? err.message
+          : language === 'ar'
+          ? 'فشل تسجيل الدخول. يرجى المحاولة مرة أخرى.'
+          : 'Authentication failed. Please try again.';
       setErrorMsg(message);
     } finally {
       setLoading(false);
@@ -144,21 +182,35 @@ export default function AuthPage() {
   };
 
   return (
-    <div className="min-h-screen bg-black text-white flex flex-col justify-center items-center p-4 sm:p-6 selection:bg-white selection:text-black">
+    <div className="min-h-screen bg-black text-white flex flex-col justify-center items-center p-4 sm:p-6 selection:bg-white selection:text-black relative">
+      {/* Top Language Switcher Bar */}
+      <div className="absolute top-4 right-4 z-20">
+        <button
+          onClick={toggleLanguage}
+          className="px-3 py-1.5 rounded-xl bg-[#111111] hover:bg-[#1a1a1a] text-neutral-300 hover:text-white text-xs font-bold flex items-center gap-2 border border-white/10 transition-all cursor-pointer shadow-lg"
+          title={language === 'en' ? 'التبديل إلى العربية' : 'Switch to English'}
+        >
+          <Globe className="w-3.5 h-3.5 text-neutral-400" />
+          <span>{language === 'en' ? '🇪🇬 العربية' : '🇬🇧 English'}</span>
+        </button>
+      </div>
+
       <div className="w-full max-w-lg">
         {/* Brand & Badge Header */}
         <div className="text-center mb-6">
           <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-[#111111] border border-white/10 text-xs font-mono tracking-wider text-neutral-300 mb-3">
             <GraduationCap className="w-4 h-4 text-white" />
-            <span className="font-bold">البكالوريا المصرية • BACCALAUREATE</span>
+            <span className="font-bold">
+              {language === 'ar'
+                ? 'البكالوريا المصرية • BACCALAUREATE'
+                : 'EGYPTIAN BACCALAUREATE • SYSTEM'}
+            </span>
           </div>
           <h1 className="text-3xl sm:text-4xl font-black tracking-tight text-white uppercase">
-            {mode === 'signin' ? 'SIGN IN' : 'SIGN UP'}
+            {mode === 'signin' ? t('signIn') : t('signUp')}
           </h1>
           <p className="text-xs text-neutral-400 mt-1.5 max-w-md mx-auto">
-            {mode === 'signin'
-              ? 'Enter your student credentials to access your Baccalaureate dashboard'
-              : 'Create your private student profile for the new Egyptian Baccalaureate system'}
+            {mode === 'signin' ? t('signInDesc') : t('signUpDesc')}
           </p>
         </div>
 
@@ -176,7 +228,7 @@ export default function AuthPage() {
               }`}
             >
               <LogIn className="w-4 h-4" />
-              <span>SIGN IN</span>
+              <span>{t('signIn')}</span>
             </button>
 
             <button
@@ -189,7 +241,7 @@ export default function AuthPage() {
               }`}
             >
               <UserPlus className="w-4 h-4" />
-              <span>SIGN UP</span>
+              <span>{t('signUp')}</span>
             </button>
           </div>
 
@@ -215,7 +267,7 @@ export default function AuthPage() {
                 {/* Full Name */}
                 <div>
                   <label className="block text-xs font-semibold text-neutral-300 mb-1.5">
-                    Full Name (الاسم بالكامل)
+                    {t('fullName')}
                   </label>
                   <div className="relative">
                     <User className="w-4 h-4 text-neutral-500 absolute left-3.5 top-1/2 -translate-y-1/2" />
@@ -224,34 +276,43 @@ export default function AuthPage() {
                       required
                       value={fullName}
                       onChange={(e) => setFullName(e.target.value)}
+                      placeholder={language === 'ar' ? 'مثال: إسماعيل محمد حطاب' : 'e.g. Ismail Mohamed Hatab'}
                       className="w-full glass-input pl-10 pr-3.5 py-2.5 rounded-xl text-sm"
                     />
                   </div>
                 </div>
 
-                {/* Baccalaureate Track (المسار التخصصي) */}
+                {/* Baccalaureate Track */}
                 <div>
                   <div className="flex items-center justify-between mb-1.5">
                     <label className="block text-xs font-semibold text-neutral-300">
-                      Baccalaureate Track (المسار التخصصي)
+                      {t('trackLabel')}
                     </label>
-                    <span className="text-[10px] text-neutral-500 font-mono">نظام البكالوريا الجديد</span>
+                    <span className="text-[10px] text-neutral-500 font-mono">
+                      {language === 'ar' ? 'نظام البكالوريا الجديد' : 'Egyptian Baccalaureate'}
+                    </span>
                   </div>
                   <div className="grid grid-cols-2 gap-2">
-                    {BACCALAUREATE_TRACKS.map((t) => (
+                    {BACCALAUREATE_TRACKS.map((tItem) => (
                       <button
-                        key={t.id}
+                        key={tItem.id}
                         type="button"
-                        onClick={() => setTrack(t.id)}
+                        onClick={() => setTrack(tItem.id)}
                         className={`p-2.5 text-left rounded-xl text-xs font-bold transition-all border cursor-pointer ${
-                          track === t.id
+                          track === tItem.id
                             ? 'bg-white text-black border-white shadow'
                             : 'bg-[#111111] text-neutral-400 border-white/5 hover:text-white hover:border-white/20'
                         }`}
                       >
-                        <span className="block font-bold text-xs">{t.name}</span>
-                        <span className={`block text-[10px] mt-0.5 font-normal ${track === t.id ? 'text-neutral-700' : 'text-neutral-500'}`}>
-                          {t.en}
+                        <span className="block font-bold text-xs">
+                          {language === 'ar' ? tItem.name : tItem.en}
+                        </span>
+                        <span
+                          className={`block text-[10px] mt-0.5 font-normal ${
+                            track === tItem.id ? 'text-neutral-700' : 'text-neutral-500'
+                          }`}
+                        >
+                          {language === 'ar' ? tItem.en : tItem.name}
                         </span>
                       </button>
                     ))}
@@ -261,7 +322,7 @@ export default function AuthPage() {
                 {/* Target Percentage */}
                 <div>
                   <label className="block text-xs font-semibold text-neutral-300 mb-1.5">
-                    Target Overall Percentage % (النسبة المستهدفة)
+                    {t('targetPercentage')}
                   </label>
                   <div className="relative">
                     <Target className="w-4 h-4 text-neutral-500 absolute left-3.5 top-1/2 -translate-y-1/2" />
@@ -272,6 +333,7 @@ export default function AuthPage() {
                       max="100"
                       value={targetPercentage}
                       onChange={(e) => setTargetPercentage(e.target.value)}
+                      placeholder="95.0"
                       className="w-full glass-input pl-10 pr-3.5 py-2.5 rounded-xl text-sm font-mono"
                     />
                   </div>
@@ -282,7 +344,7 @@ export default function AuthPage() {
             {/* Email */}
             <div>
               <label className="block text-xs font-semibold text-neutral-300 mb-1.5">
-                Email Address
+                {t('emailLabel')}
               </label>
               <div className="relative">
                 <Mail className="w-4 h-4 text-neutral-500 absolute left-3.5 top-1/2 -translate-y-1/2" />
@@ -291,6 +353,7 @@ export default function AuthPage() {
                   required
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
+                  placeholder="student@example.com"
                   className="w-full glass-input pl-10 pr-3.5 py-2.5 rounded-xl text-sm"
                 />
               </div>
@@ -299,7 +362,7 @@ export default function AuthPage() {
             {/* Password */}
             <div>
               <label className="block text-xs font-semibold text-neutral-300 mb-1.5">
-                Password
+                {t('passwordLabel')}
               </label>
               <div className="relative">
                 <Lock className="w-4 h-4 text-neutral-500 absolute left-3.5 top-1/2 -translate-y-1/2" />
@@ -309,6 +372,7 @@ export default function AuthPage() {
                   minLength={6}
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
+                  placeholder="•••••••••"
                   className="w-full glass-input pl-10 pr-10 py-2.5 rounded-xl text-sm"
                 />
                 <button
@@ -326,7 +390,7 @@ export default function AuthPage() {
             {mode === 'signup' && (
               <div>
                 <label className="block text-xs font-semibold text-neutral-300 mb-1.5">
-                  Confirm Password
+                  {t('confirmPasswordLabel')}
                 </label>
                 <div className="relative">
                   <ShieldCheck className="w-4 h-4 text-neutral-500 absolute left-3.5 top-1/2 -translate-y-1/2" />
@@ -336,6 +400,7 @@ export default function AuthPage() {
                     minLength={6}
                     value={confirmPassword}
                     onChange={(e) => setConfirmPassword(e.target.value)}
+                    placeholder="•••••••••"
                     className="w-full glass-input pl-10 pr-10 py-2.5 rounded-xl text-sm"
                   />
                   <button
@@ -359,11 +424,11 @@ export default function AuthPage() {
               {loading ? (
                 <div className="flex items-center gap-2">
                   <div className="w-4 h-4 border-2 border-black/30 border-t-black rounded-full animate-spin" />
-                  <span>Processing...</span>
+                  <span>{t('processing')}</span>
                 </div>
               ) : (
                 <>
-                  <span>{mode === 'signin' ? 'SIGN IN' : 'SIGN UP'}</span>
+                  <span>{mode === 'signin' ? t('signIn') : t('signUp')}</span>
                   <ArrowRight className="w-4 h-4" />
                 </>
               )}
@@ -374,24 +439,24 @@ export default function AuthPage() {
           <div className="mt-6 pt-5 border-t border-white/10 text-center">
             {mode === 'signin' ? (
               <p className="text-xs text-neutral-400">
-                Don't have an account yet?{' '}
+                {t('noAccount')}{' '}
                 <button
                   type="button"
                   onClick={() => handleModeSwitch('signup')}
                   className="text-white font-bold uppercase tracking-wider hover:underline cursor-pointer ml-1"
                 >
-                  SIGN UP NOW
+                  {t('signUpNow')}
                 </button>
               </p>
             ) : (
               <p className="text-xs text-neutral-400">
-                Already registered?{' '}
+                {t('haveAccount')}{' '}
                 <button
                   type="button"
                   onClick={() => handleModeSwitch('signin')}
                   className="text-white font-bold uppercase tracking-wider hover:underline cursor-pointer ml-1"
                 >
-                  SIGN IN HERE
+                  {t('signInHere')}
                 </button>
               </p>
             )}
