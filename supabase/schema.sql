@@ -213,8 +213,13 @@ CREATE POLICY "Users can manage their telegram links" ON public.telegram_links
 CREATE OR REPLACE FUNCTION public.handle_new_user()
 RETURNS TRIGGER AS $$
 BEGIN
-  INSERT INTO public.profiles (id, full_name)
-  VALUES (NEW.id, COALESCE(NEW.raw_user_meta_data->>'full_name', 'Thanaweya Student'));
+  INSERT INTO public.profiles (id, full_name, study_division, target_percentage)
+  VALUES (
+    NEW.id,
+    COALESCE(NEW.raw_user_meta_data->>'full_name', 'Student'),
+    COALESCE(NEW.raw_user_meta_data->>'study_division', 'medical_life_sciences'),
+    COALESCE((NEW.raw_user_meta_data->>'target_percentage')::NUMERIC, 95.0)
+  );
   
   -- Insert default habits
   INSERT INTO public.habits (user_id, name, type, target_value, unit)
