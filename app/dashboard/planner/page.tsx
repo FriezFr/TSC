@@ -32,7 +32,7 @@ export default function StudyPlannerPage() {
   const [selectedDay, setSelectedDay] = useState(0);
   const [newSubject, setNewSubject] = useState('Physics');
   const [newHours, setNewHours] = useState('2');
-  const [newSlot, setNewSlot] = useState('16:00 - 18:00');
+  const [newSlot, setNewSlot] = useState('');
   const [newNotes, setNewNotes] = useState('');
 
   const saveBlocks = (newB: StudyBlock[]) => {

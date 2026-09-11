@@ -9,7 +9,7 @@ export default function QuickNotesPage() {
   const { notes, addNote, togglePinNote, deleteNote } = useApp();
 
   const [content, setContent] = useState('');
-  const [tagInput, setTagInput] = useState('Study');
+  const [tagInput, setTagInput] = useState('');
   const [selectedTag, setSelectedTag] = useState<string>('all');
 
   const handleAddNote = async (e: React.FormEvent) => {

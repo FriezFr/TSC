@@ -8,7 +8,7 @@ import { Moon, Flame, Check, Sparkles } from 'lucide-react';
 export default function HabitTrackerPage() {
   const { habits, habitLogs, toggleHabitToday, setHabitValueToday } = useApp();
 
-  const [sleepInput, setSleepInput] = useState('7.5');
+  const [sleepInput, setSleepInput] = useState('');
   const todayStr = new Date().toISOString().split('T')[0];
 
   const pastDays = Array.from({ length: 7 }, (_, i) => {
