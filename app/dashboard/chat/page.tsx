@@ -20,6 +20,62 @@ import {
 } from 'lucide-react';
 import Link from 'next/link';
 
+// Component to clean up LaTeX math and markdown symbols for natural display
+function FormattedMessage({ content }: { content: string }) {
+  // Clean raw LaTeX dollar signs and brackets
+  const cleanContent = content
+    .replace(/\$\$([\s\S]*?)\$\$/g, '$1')
+    .replace(/\$([^\$\n]+)\$/g, '$1')
+    .replace(/\\\(([\s\S]*?)\\\)/g, '$1')
+    .replace(/\\\[([\s\S]*?)\\\]/g, '$1')
+    .replace(/\\times/g, '×')
+    .replace(/\\div/g, '÷')
+    .replace(/\\le/g, '≤')
+    .replace(/\\ge/g, '≥');
+
+  const lines = cleanContent.split('\n');
+
+  return (
+    <div className="space-y-1 leading-relaxed text-xs" dir="auto">
+      {lines.map((line, idx) => {
+        const trimmed = line.trim();
+        if (!trimmed) {
+          return <div key={idx} className="h-1" />;
+        }
+
+        // Parse bolding **text**
+        const parts = line.split(/(\*\*.*?\*\*)/g);
+
+        const renderedLine = parts.map((part, pIdx) => {
+          if (part.startsWith('**') && part.endsWith('**') && part.length > 4) {
+            const boldText = part.slice(2, -2);
+            return (
+              <strong key={pIdx} className="font-bold text-white tracking-wide">
+                {boldText}
+              </strong>
+            );
+          }
+          // Remove stray asterisks from words
+          const cleanPart = part.replace(/(^|\s)\*([^\*]+)\*(\s|$)/g, '$1$2$3');
+          return <span key={pIdx}>{cleanPart}</span>;
+        });
+
+        // Bullet points
+        if (trimmed.startsWith('•') || trimmed.startsWith('- ') || /^\d+\.\s/.test(trimmed)) {
+          return (
+            <div key={idx} className="flex items-start gap-1.5 my-0.5">
+              <span className="shrink-0 text-blue-400 font-bold">•</span>
+              <div className="flex-1">{renderedLine}</div>
+            </div>
+          );
+        }
+
+        return <div key={idx}>{renderedLine}</div>;
+      })}
+    </div>
+  );
+}
+
 export default function ChatDashboardPage() {
   const {
     chatMessages,
@@ -27,8 +83,6 @@ export default function ChatDashboardPage() {
     refreshChatMessages,
     clearChatMessages,
     telegramLinked,
-    telegramCode,
-    generateTelegramCode,
     t,
   } = useApp();
 
@@ -43,7 +97,7 @@ export default function ChatDashboardPage() {
   // Auto-scroll to bottom on new messages
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [chatMessages]);
+  }, [chatMessages, isSending]);
 
   // Periodic sync from Telegram every 6 seconds
   useEffect(() => {
@@ -85,7 +139,7 @@ export default function ChatDashboardPage() {
 
   return (
     <div className="flex flex-col h-[calc(100vh-8.5rem)] space-y-4">
-      {/* Top Header & Telegram Connection Banner */}
+      {/* Top Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 shrink-0">
         <div>
           <h1 className="text-2xl font-bold text-white tracking-tight flex items-center gap-2">
@@ -100,6 +154,18 @@ export default function ChatDashboardPage() {
         </div>
 
         <div className="flex items-center gap-2">
+          {/* Quick Open Telegram Bot Button */}
+          <a
+            href="https://t.me/TSCTaskerBot"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="px-3.5 py-2 rounded-xl bg-sky-500/15 hover:bg-sky-500/25 border border-sky-500/30 text-sky-300 text-xs font-bold flex items-center gap-1.5 transition-all shadow-sm cursor-pointer"
+          >
+            <Send className="w-3.5 h-3.5" />
+            <span>Open @TSCTaskerBot</span>
+            <ExternalLink className="w-3 h-3 opacity-70" />
+          </a>
+
           <button
             onClick={handleRefresh}
             className="p-2 rounded-xl glass-button-secondary text-xs flex items-center gap-1.5 cursor-pointer text-neutral-300 hover:text-white"
@@ -229,7 +295,7 @@ export default function ChatDashboardPage() {
 
                   {/* Message Bubble */}
                   <div
-                    className={`rounded-2xl px-4 py-3 text-xs leading-relaxed space-y-1 max-w-[85%] sm:max-w-[75%] ${
+                    className={`rounded-2xl px-4 py-3 text-xs leading-relaxed space-y-1.5 max-w-[85%] sm:max-w-[75%] ${
                       isUser
                         ? 'bg-neutral-900 border border-white/15 text-white'
                         : 'bg-[#0e0e0e] border border-white/10 text-neutral-200 shadow-md'
@@ -273,15 +339,31 @@ export default function ChatDashboardPage() {
                       </div>
                     )}
 
-                    {/* Body Text (preserving markdown and lines) */}
-                    <div className="whitespace-pre-wrap font-sans text-neutral-100 selection:bg-white selection:text-black">
-                      {msg.content}
-                    </div>
+                    {/* Clean Formatted Message Content (NO raw $ or stray *) */}
+                    <FormattedMessage content={msg.content} />
                   </div>
                 </div>
               );
             })
           )}
+
+          {/* AI Thinking Animation */}
+          {isSending && (
+            <div className="flex gap-3 max-w-3xl mr-auto">
+              <div className="w-7 h-7 rounded-xl shrink-0 flex items-center justify-center text-xs font-bold bg-[#181818] text-white border border-white/10">
+                <Bot className="w-3.5 h-3.5 text-blue-400" />
+              </div>
+              <div className="rounded-2xl px-4 py-3 text-xs bg-[#0e0e0e] border border-white/10 text-neutral-400 flex items-center gap-2">
+                <div className="flex gap-1">
+                  <span className="w-1.5 h-1.5 rounded-full bg-blue-400 animate-bounce [animation-delay:-0.3s]" />
+                  <span className="w-1.5 h-1.5 rounded-full bg-blue-400 animate-bounce [animation-delay:-0.15s]" />
+                  <span className="w-1.5 h-1.5 rounded-full bg-blue-400 animate-bounce" />
+                </div>
+                <span className="text-[11px]">Thinking & generating response...</span>
+              </div>
+            </div>
+          )}
+
           <div ref={messagesEndRef} />
         </div>
 

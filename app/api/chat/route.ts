@@ -16,52 +16,47 @@ export async function POST(req: NextRequest) {
 
     const supabase = getSupabaseAdminClient();
 
-    // 1. Fetch user profile
-    const { data: profile } = await supabase
-      .from('profiles')
-      .select('*')
-      .eq('id', userId)
-      .maybeSingle();
+    // 1. Fetch user profile, recent notes, and insert user message in parallel for maximum speed
+    const [profileRes, recentNotesRes] = await Promise.all([
+      supabase.from('profiles').select('*').eq('id', userId).maybeSingle(),
+      supabase
+        .from('notes')
+        .select('content')
+        .eq('user_id', userId)
+        .order('created_at', { ascending: false })
+        .limit(2),
+      supabase.from('chat_messages').insert({
+        user_id: userId,
+        role: 'user',
+        source: 'web',
+        content: message.trim(),
+        media_type: 'text',
+      }),
+    ]);
 
-    // 2. Record User message in chat_messages
-    await supabase.from('chat_messages').insert({
-      user_id: userId,
-      role: 'user',
-      source: 'web',
-      content: message.trim(),
-      media_type: 'text',
-    });
+    const profile = profileRes.data;
+    const recentContext = recentNotesRes.data?.map((n: any) => n.content).join('\n---\n');
 
-    // 3. Fetch recent notes / study context
-    const { data: recentNotes } = await supabase
-      .from('notes')
-      .select('content')
-      .eq('user_id', userId)
-      .order('created_at', { ascending: false })
-      .limit(2);
-
-    const recentContext = recentNotes?.map((n: any) => n.content).join('\n---\n');
-
-    // 4. Process with Gemini 3.6 Flash
+    // 2. Process with Gemini 3.6 Flash
     const aiResponse = await processUserMessageWithAI({
       text: message.trim(),
       userProfile: profile,
       recentContext: recentContext || undefined,
     });
 
-    // 5. Execute any dashboard action
-    if (aiResponse.action) {
-      await executeAction(supabase, userId, aiResponse.action);
-    }
-
-    // 6. Record Assistant reply in chat_messages
-    await supabase.from('chat_messages').insert({
-      user_id: userId,
-      role: 'assistant',
-      source: 'web',
-      content: aiResponse.reply,
-      media_type: 'text',
-    });
+    // 3. Record Assistant reply and execute action in parallel
+    await Promise.all([
+      Promise.resolve(
+        supabase.from('chat_messages').insert({
+          user_id: userId,
+          role: 'assistant',
+          source: 'web',
+          content: aiResponse.reply,
+          media_type: 'text',
+        })
+      ),
+      aiResponse.action ? executeAction(supabase, userId, aiResponse.action) : Promise.resolve(),
+    ]);
 
     return NextResponse.json({
       reply: aiResponse.reply,

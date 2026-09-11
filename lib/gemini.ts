@@ -39,6 +39,11 @@ DIRECTIVES:
    Include this tag at the very end of your response:
    ACTION: {"type": "assignment"|"exam"|"grade"|"habit", "title": "...", "subject": "...", "date": "YYYY-MM-DD", "score": number, "max_score": number, "value": number}
    (Only include this tag if an actionable task or score was mentioned. Never include it for general conversation or document explanation).
+
+4. CLEAN, BEAUTIFUL CHAT (STRICT FORMATTING):
+   - NEVER use LaTeX math dollar signs ($ or $$). Write all math, equations, numbers, and formulas in clear, natural text (e.g. "1 + 1 = 2" or "V = I × R" or "E = mc²").
+   - NEVER put asterisks around numbers or single punctuation (do not write **2** or **=**).
+   - Write cleanly, naturally, and concisely so the response is fast and readable on both Telegram and the web.
 `;
 
 export async function processUserMessageWithAI(options: {
@@ -112,6 +117,10 @@ export async function processUserMessageWithAI(options: {
     try {
       const model = genAI.getGenerativeModel({
         model: modelName,
+        generationConfig: {
+          maxOutputTokens: 1024,
+          temperature: 0.6,
+        },
       });
 
       const result = await model.generateContent(parts);
@@ -129,6 +138,18 @@ export async function processUserMessageWithAI(options: {
           // ignore action parse error
         }
       }
+
+      // Sanitize output so it doesn't have messy $ and ugly *
+      responseText = responseText
+        .replace(/\$\$([\s\S]*?)\$\$/g, '$1') // remove $$ math blocks
+        .replace(/\$([^\$\n]+)\$/g, '$1')   // remove inline $ math markers
+        .replace(/\\\(([\s\S]*?)\\\)/g, '$1') // remove \( \)
+        .replace(/\\\[([\s\S]*?)\\\]/g, '$1') // remove \[ \]
+        .replace(/\*\*(\d+)\*\*/g, '$1')     // remove ** around isolated numbers
+        .replace(/\\times/g, '×')
+        .replace(/\\div/g, '÷')
+        .replace(/\\le/g, '≤')
+        .replace(/\\ge/g, '≥');
 
       if (responseText) {
         return {
