@@ -48,8 +48,8 @@ export default function DashboardLayout({
         {/* Top Header Bar */}
         <header className="sticky top-0 z-30 px-4 lg:px-8 py-3.5 bg-black/90 backdrop-blur-md border-b border-white/10 flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <span className="text-xs font-semibold text-neutral-400">
-              Thanaweya Dashboard
+            <span className="text-xs font-semibold text-neutral-300">
+              البكالوريا المصرية • Baccalaureate
             </span>
             <span className="text-neutral-700">•</span>
             <span className="text-xs text-neutral-300 font-medium">

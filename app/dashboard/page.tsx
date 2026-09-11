@@ -114,7 +114,13 @@ export default function TodayViewPage() {
               {profile?.full_name ? `Welcome back, ${profile.full_name.split(' ')[0]}` : 'Today Overview'}
             </h1>
             <p className="text-xs text-neutral-400 mt-1">
-              Division: {profile?.study_division?.replace('_', ' ') || 'General'} • Target: {profile?.target_percentage || 95}%
+              المسار: {
+                profile?.study_division === 'medical_life_sciences' ? 'الطب وعلوم الحياة (Medical)' :
+                profile?.study_division === 'engineering_cs' ? 'الهندسة وعلوم الحاسب (Engineering & CS)' :
+                profile?.study_division === 'business' ? 'الأعمال والإدارة (Business)' :
+                profile?.study_division === 'humanities_arts' ? 'الآداب والعلوم الإنسانية (Humanities)' :
+                profile?.study_division || 'البكالوريا'
+              } • الهدف: {profile?.target_percentage || 95}%
             </p>
           </div>
 
@@ -171,7 +177,7 @@ export default function TodayViewPage() {
             <span className="text-2xl font-bold text-white font-mono">
               {profile?.target_percentage || 95}%
             </span>
-            <span className="block text-[11px] text-neutral-500 mt-1">Thanaweya target</span>
+            <span className="block text-[11px] text-neutral-500 mt-1">هدف البكالوريا</span>
           </GlassCard>
         </Link>
       </div>

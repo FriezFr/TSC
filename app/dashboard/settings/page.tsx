@@ -206,16 +206,17 @@ export default function SettingsPage() {
 
                 <div>
                   <label className="block text-xs font-medium text-neutral-300 mb-1">
-                    Division
+                    المسار التخصصي (Track)
                   </label>
                   <select
                     value={profile.study_division}
                     onChange={(e) => updateProfile({ study_division: e.target.value as any })}
                     className="w-full glass-input px-3 py-2 rounded-xl text-xs bg-[#0d0d0d] text-white"
                   >
-                    <option value="scientific_science">علمي علوم (Science)</option>
-                    <option value="scientific_math">علمي رياضة (Math)</option>
-                    <option value="literary">أدبي (Literary)</option>
+                    <option value="medical_life_sciences">مسار الطب وعلوم الحياة (Medical)</option>
+                    <option value="engineering_cs">مسار الهندسة وعلوم الحاسب (Engineering & CS)</option>
+                    <option value="business">مسار الأعمال والإدارة (Business)</option>
+                    <option value="humanities_arts">مسار الآداب والعلوم الإنسانية (Humanities)</option>
                   </select>
                 </div>
 

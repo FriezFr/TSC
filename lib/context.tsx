@@ -104,7 +104,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         const defaultProfile: UserProfile = {
           id: userId,
           full_name: 'Student',
-          study_division: 'scientific_science',
+          study_division: 'medical_life_sciences',
           target_percentage: 95.0,
         };
         await supabase.from('profiles').insert([defaultProfile]);

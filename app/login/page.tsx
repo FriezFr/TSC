@@ -19,9 +19,9 @@ import {
   GraduationCap,
 } from 'lucide-react';
 import { useApp } from '@/lib/context';
+import { BaccalaureateTrack, BACCALAUREATE_TRACKS } from '@/lib/types';
 
 type AuthMode = 'signin' | 'signup';
-type Division = 'scientific_science' | 'scientific_math' | 'literary';
 
 export default function AuthPage() {
   const router = useRouter();
@@ -33,7 +33,7 @@ export default function AuthPage() {
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [fullName, setFullName] = useState('');
-  const [division, setDivision] = useState<Division>('scientific_science');
+  const [track, setTrack] = useState<BaccalaureateTrack>('medical_life_sciences');
   const [targetPercentage, setTargetPercentage] = useState('');
 
   // UI State
@@ -90,7 +90,7 @@ export default function AuthPage() {
           options: {
             data: {
               full_name: fullName.trim(),
-              study_division: division,
+              study_division: track,
               target_percentage: isNaN(parsedTarget) ? 95.0 : parsedTarget,
             },
           },
@@ -104,10 +104,10 @@ export default function AuthPage() {
         }
 
         if (data.session) {
-          // Direct login without email confirmation
+          // Direct session login
           router.push('/dashboard');
         } else {
-          // Supabase email confirmation enabled
+          // Email confirmation enabled in Supabase
           setSuccessMsg('Account created successfully! If email verification is enabled, check your inbox to confirm, or click SIGN IN below.');
           setMode('signin');
           setPassword('');
@@ -145,26 +145,26 @@ export default function AuthPage() {
 
   return (
     <div className="min-h-screen bg-black text-white flex flex-col justify-center items-center p-4 sm:p-6 selection:bg-white selection:text-black">
-      <div className="w-full max-w-md">
+      <div className="w-full max-w-lg">
         {/* Brand & Badge Header */}
         <div className="text-center mb-6">
-          <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-[#111111] border border-white/10 text-[11px] font-mono tracking-wider text-neutral-400 mb-3">
-            <GraduationCap className="w-3.5 h-3.5 text-white" />
-            <span>ثانوية عامة • THANAWEYA</span>
+          <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-[#111111] border border-white/10 text-xs font-mono tracking-wider text-neutral-300 mb-3">
+            <GraduationCap className="w-4 h-4 text-white" />
+            <span className="font-bold">البكالوريا المصرية • BACCALAUREATE</span>
           </div>
           <h1 className="text-3xl sm:text-4xl font-black tracking-tight text-white uppercase">
             {mode === 'signin' ? 'SIGN IN' : 'SIGN UP'}
           </h1>
-          <p className="text-xs text-neutral-400 mt-1.5 max-w-xs mx-auto">
+          <p className="text-xs text-neutral-400 mt-1.5 max-w-md mx-auto">
             {mode === 'signin'
-              ? 'Enter your student credentials to access your private dashboard'
-              : 'Create your private student profile to track your revision and exams'}
+              ? 'Enter your student credentials to access your Baccalaureate dashboard'
+              : 'Create your private student profile for the new Egyptian Baccalaureate system'}
           </p>
         </div>
 
         {/* OLED Stealth Black Authentication Card */}
         <div className="bg-[#0a0a0a] rounded-2xl p-6 sm:p-8 border border-white/10 shadow-2xl backdrop-blur-xl">
-          {/* Prominent High-Contrast Segmented Tabs */}
+          {/* Segmented Dual Tabs */}
           <div className="grid grid-cols-2 p-1 rounded-xl bg-[#141414] border border-white/10 mb-6">
             <button
               type="button"
@@ -215,7 +215,7 @@ export default function AuthPage() {
                 {/* Full Name */}
                 <div>
                   <label className="block text-xs font-semibold text-neutral-300 mb-1.5">
-                    Full Name (الاسم)
+                    Full Name (الاسم بالكامل)
                   </label>
                   <div className="relative">
                     <User className="w-4 h-4 text-neutral-500 absolute left-3.5 top-1/2 -translate-y-1/2" />
@@ -229,52 +229,39 @@ export default function AuthPage() {
                   </div>
                 </div>
 
-                {/* Division Selector (Interactive Pills) */}
+                {/* Baccalaureate Track (المسار التخصصي) */}
                 <div>
-                  <label className="block text-xs font-semibold text-neutral-300 mb-1.5">
-                    Academic Division (الشعبة)
-                  </label>
-                  <div className="grid grid-cols-3 gap-2">
-                    <button
-                      type="button"
-                      onClick={() => setDivision('scientific_science')}
-                      className={`py-2 px-1 text-center rounded-xl text-xs font-bold transition-all border cursor-pointer ${
-                        division === 'scientific_science'
-                          ? 'bg-white text-black border-white'
-                          : 'bg-[#111111] text-neutral-400 border-white/5 hover:text-white hover:border-white/20'
-                      }`}
-                    >
-                      علمي علوم
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setDivision('scientific_math')}
-                      className={`py-2 px-1 text-center rounded-xl text-xs font-bold transition-all border cursor-pointer ${
-                        division === 'scientific_math'
-                          ? 'bg-white text-black border-white'
-                          : 'bg-[#111111] text-neutral-400 border-white/5 hover:text-white hover:border-white/20'
-                      }`}
-                    >
-                      علمي رياضة
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setDivision('literary')}
-                      className={`py-2 px-1 text-center rounded-xl text-xs font-bold transition-all border cursor-pointer ${
-                        division === 'literary'
-                          ? 'bg-white text-black border-white'
-                          : 'bg-[#111111] text-neutral-400 border-white/5 hover:text-white hover:border-white/20'
-                      }`}
-                    >
-                      أدبي
-                    </button>
+                  <div className="flex items-center justify-between mb-1.5">
+                    <label className="block text-xs font-semibold text-neutral-300">
+                      Baccalaureate Track (المسار التخصصي)
+                    </label>
+                    <span className="text-[10px] text-neutral-500 font-mono">نظام البكالوريا الجديد</span>
+                  </div>
+                  <div className="grid grid-cols-2 gap-2">
+                    {BACCALAUREATE_TRACKS.map((t) => (
+                      <button
+                        key={t.id}
+                        type="button"
+                        onClick={() => setTrack(t.id)}
+                        className={`p-2.5 text-left rounded-xl text-xs font-bold transition-all border cursor-pointer ${
+                          track === t.id
+                            ? 'bg-white text-black border-white shadow'
+                            : 'bg-[#111111] text-neutral-400 border-white/5 hover:text-white hover:border-white/20'
+                        }`}
+                      >
+                        <span className="block font-bold text-xs">{t.name}</span>
+                        <span className={`block text-[10px] mt-0.5 font-normal ${track === t.id ? 'text-neutral-700' : 'text-neutral-500'}`}>
+                          {t.en}
+                        </span>
+                      </button>
+                    ))}
                   </div>
                 </div>
 
                 {/* Target Percentage */}
                 <div>
                   <label className="block text-xs font-semibold text-neutral-300 mb-1.5">
-                    Target Score Percentage % (النسبة المستهدفة)
+                    Target Overall Percentage % (النسبة المستهدفة)
                   </label>
                   <div className="relative">
                     <Target className="w-4 h-4 text-neutral-500 absolute left-3.5 top-1/2 -translate-y-1/2" />

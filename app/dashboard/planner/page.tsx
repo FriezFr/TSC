@@ -18,7 +18,7 @@ interface StudyBlock {
 export default function StudyPlannerPage() {
   const [blocks, setBlocks] = useState<StudyBlock[]>(() => {
     if (typeof window !== 'undefined') {
-      const saved = localStorage.getItem('thanaweya_study_blocks_user');
+      const saved = localStorage.getItem('baccalaureate_study_blocks_user') || localStorage.getItem('thanaweya_study_blocks_user');
       if (saved) {
         try {
           return JSON.parse(saved);
@@ -38,7 +38,7 @@ export default function StudyPlannerPage() {
   const saveBlocks = (newB: StudyBlock[]) => {
     setBlocks(newB);
     try {
-      localStorage.setItem('thanaweya_study_blocks_user', JSON.stringify(newB));
+      localStorage.setItem('baccalaureate_study_blocks_user', JSON.stringify(newB));
     } catch {}
   };
 

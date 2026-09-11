@@ -1,9 +1,18 @@
 export type Priority = 'low' | 'medium' | 'high';
 
+export type BaccalaureateTrack =
+  | 'medical_life_sciences'   // مسار الطب وعلوم الحياة
+  | 'engineering_cs'          // مسار الهندسة وعلوم الحاسب
+  | 'business'                // مسار الأعمال
+  | 'humanities_arts';        // مسار الآداب والعلوم الإنسانية
+
+// Backward compatibility alias
+export type StudyDivision = BaccalaureateTrack | 'scientific_science' | 'scientific_math' | 'literary';
+
 export interface UserProfile {
   id: string;
   full_name: string;
-  study_division: 'scientific_science' | 'scientific_math' | 'literary';
+  study_division: StudyDivision;
   target_percentage: number;
   created_at?: string;
 }
@@ -117,19 +126,40 @@ export interface TelegramLink {
   linked_at?: string | null;
 }
 
-// Egyptian Thanaweya Amma Default Subjects
-export const THANAWEYA_SUBJECTS = [
-  { id: 'arabic', name: 'Arabic (اللغة العربية)', color: '#38bdf8' },
-  { id: 'english', name: 'English (اللغة الإنجليزية)', color: '#818cf8' },
-  { id: 'french', name: '2nd Language (French / German / Italian)', color: '#c084fc' },
-  { id: 'physics', name: 'Physics (الفيزياء)', color: '#f43f5e' },
-  { id: 'chemistry', name: 'Chemistry (الكيمياء)', color: '#fb923c' },
-  { id: 'biology', name: 'Biology (الأحياء)', color: '#4ade80' },
-  { id: 'geology', name: 'Geology (الجيولوجيا)', color: '#a3e635' },
-  { id: 'pure_math', name: 'Pure Math (الرياضيات البحتة)', color: '#2dd4bf' },
-  { id: 'applied_math', name: 'Applied Math (الرياضيات التطبيقية)', color: '#06b6d4' },
-  { id: 'history', name: 'History (التاريخ)', color: '#facc15' },
-  { id: 'geography', name: 'Geography (الجغرافيا)', color: '#fbbf24' },
-  { id: 'philosophy', name: 'Philosophy (الفلسفة والمنطق)', color: '#e879f9' },
-  { id: 'psychology', name: 'Psychology (علم النفس والاجتماع)', color: '#f472b6' },
+// Egyptian Baccalaureate (البكالوريا المصرية) Tracks
+export const BACCALAUREATE_TRACKS = [
+  { id: 'medical_life_sciences', name: 'الطب وعلوم الحياة', label: 'مسار الطب وعلوم الحياة', en: 'Medical & Life Sciences' },
+  { id: 'engineering_cs', name: 'الهندسة وعلوم الحاسب', label: 'مسار الهندسة وعلوم الحاسب', en: 'Engineering & CS' },
+  { id: 'business', name: 'الأعمال والإدارة', label: 'مسار الأعمال', en: 'Business & Economics' },
+  { id: 'humanities_arts', name: 'الآداب والعلوم الإنسانية', label: 'مسار الآداب والفنون والعلوم الإنسانية', en: 'Humanities & Arts' },
 ] as const;
+
+// Egyptian Baccalaureate Subjects (مواد البكالوريا المصرية)
+export const BACCALAUREATE_SUBJECTS = [
+  // Core Common Subjects (المواد العامة المشتركة)
+  { id: 'arabic', name: 'Arabic (اللغة العربية)' },
+  { id: 'english', name: 'English (اللغة الإنجليزية الأولى)' },
+  { id: 'history', name: 'History (التاريخ)' },
+
+  // Medical & Life Sciences Track (مسار الطب وعلوم الحياة)
+  { id: 'biology', name: 'Biology (الأحياء - مستوى متقدم)' },
+  { id: 'chemistry', name: 'Chemistry (الكيمياء - مستوى متقدم)' },
+  { id: 'physics', name: 'Physics (الفيزياء)' },
+
+  // Engineering & CS Track (مسار الهندسة وعلوم الحاسب)
+  { id: 'pure_math', name: 'Mathematics (الرياضيات - مستوى متقدم)' },
+  { id: 'programming_ai', name: 'Programming & AI (البرمجة والذكاء الاصطناعي)' },
+
+  // Business Track (مسار الأعمال)
+  { id: 'economics', name: 'Economics (الاقتصاد - مستوى متقدم)' },
+  { id: 'business_mgmt', name: 'Accounting & Business (المحاسبة وإدارة الأعمال)' },
+
+  // Humanities & Arts Track (مسار الآداب والفنون والعلوم الإنسانية)
+  { id: 'geography', name: 'Geography (الجغرافيا - مستوى متقدم)' },
+  { id: 'psychology', name: 'Psychology (علم النفس)' },
+  { id: 'statistics', name: 'Statistics (الإحصاء)' },
+  { id: 'second_lang', name: 'Second Language (اللغة الأجنبية الثانية)' },
+] as const;
+
+// Backwards compatibility alias
+export const THANAWEYA_SUBJECTS = BACCALAUREATE_SUBJECTS;

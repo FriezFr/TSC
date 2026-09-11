@@ -47,13 +47,13 @@ export default function Sidebar() {
         {/* Brand Header */}
         <div className="flex items-center gap-3 px-2 py-2 mb-6 border-b border-white/5 pb-4">
           <div className="w-8 h-8 rounded-xl bg-white text-black flex items-center justify-center font-black text-sm">
-            T
+            B
           </div>
           <div>
             <h1 className="text-sm font-bold tracking-tight text-white">
-              Thanaweya
+              البكالوريا
             </h1>
-            <p className="text-[11px] text-neutral-500 font-medium">Dashboard</p>
+            <p className="text-[10px] text-neutral-400 font-medium">Baccalaureate</p>
           </div>
         </div>
 

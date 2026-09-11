@@ -16,7 +16,7 @@ export interface TelegramClassifiedResult {
   };
 }
 
-const SYSTEM_INSTRUCTION = `You are the AI assistant for an Egyptian Thanaweya Amma high school student's "Thanaweya Dashboard".
+const SYSTEM_INSTRUCTION = `You are the AI assistant for an Egyptian high school student in the new Egyptian Baccalaureate (البكالوريا المصرية) system using the "Baccalaureate Dashboard".
 Current date: ${new Date().toISOString().split('T')[0]}.
 
 Classify this message as one of: assignment, exam, grade-info, habit, or note.

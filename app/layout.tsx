@@ -3,8 +3,8 @@ import './globals.css';
 import { AppProvider } from '@/lib/context';
 
 export const metadata: Metadata = {
-  title: 'Thanaweya Dashboard',
-  description: 'Minimalist black productivity dashboard for Thanaweya Amma students.',
+  title: 'البكالوريا المصرية • Baccalaureate Dashboard',
+  description: 'Minimalist OLED black productivity dashboard for Egyptian Baccalaureate (البكالوريا المصرية) students.',
 };
 
 export const viewport: Viewport = {

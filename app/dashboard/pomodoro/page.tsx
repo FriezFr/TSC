@@ -91,7 +91,7 @@ export default function PomodoroPage() {
             Pomodoro Focus
           </h1>
           <p className="text-xs text-neutral-400 mt-1">
-            Focus cycles tied to your Thanaweya subjects.
+            Focus cycles tied to your Baccalaureate subjects.
           </p>
         </div>
 

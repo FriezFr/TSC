@@ -6,7 +6,7 @@
 CREATE TABLE IF NOT EXISTS public.profiles (
   id UUID REFERENCES auth.users(id) ON DELETE CASCADE PRIMARY KEY,
   full_name TEXT,
-  study_division TEXT DEFAULT 'scientific_science', -- 'scientific_science', 'scientific_math', 'literary'
+  study_division TEXT DEFAULT 'medical_life_sciences', -- 'medical_life_sciences', 'engineering_cs', 'business', 'humanities_arts'
   target_percentage NUMERIC(5,2) DEFAULT 95.0,
   created_at TIMESTAMPTZ DEFAULT NOW(),
   updated_at TIMESTAMPTZ DEFAULT NOW()
