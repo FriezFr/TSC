@@ -1,6 +1,7 @@
 'use client';
 
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
+import { User, Session, AuthChangeEvent } from '@supabase/supabase-js';
 import {
   Assignment,
   Exam,
@@ -13,27 +14,14 @@ import {
   TimetableSlot,
   UserProfile,
 } from './types';
-import {
-  DEMO_ASSIGNMENTS,
-  DEMO_EXAMS,
-  DEMO_FLASHCARD_DECKS,
-  DEMO_FLASHCARDS,
-  DEMO_GRADES,
-  DEMO_HABITS,
-  DEMO_HABIT_LOGS,
-  DEMO_NOTES,
-  DEMO_PROFILE,
-  DEMO_STUDY_SESSIONS,
-  DEMO_TIMETABLE,
-} from './demoData';
-import { getSupabaseClient, isSupabaseConfigured } from './supabase/client';
+import { getSupabaseClient } from './supabase/client';
 
 interface AppContextType {
-  isConfigured: boolean;
-  isDemoMode: boolean;
-  setDemoMode: (val: boolean) => void;
-  profile: UserProfile;
-  updateProfile: (data: Partial<UserProfile>) => void;
+  user: User | null;
+  authLoading: boolean;
+  profile: UserProfile | null;
+  updateProfile: (data: Partial<UserProfile>) => Promise<void>;
+  signOut: () => Promise<void>;
   // Timetable
   timetable: TimetableSlot[];
   addTimetableSlot: (slot: Omit<TimetableSlot, 'id'>) => Promise<void>;
@@ -52,7 +40,7 @@ interface AppContextType {
   addGrade: (item: Omit<GradeItem, 'id'>) => Promise<void>;
   deleteGrade: (id: string) => Promise<void>;
   // Study Sessions
-  sessions: { subject: string; duration_minutes: number; completed_at: string }[];
+  sessions: { id?: string; subject: string; duration_minutes: number; completed_at: string }[];
   logSession: (subject: string, minutes: number) => Promise<void>;
   // Flashcards
   decks: FlashcardDeck[];
@@ -74,165 +62,282 @@ interface AppContextType {
   telegramCode: string;
   generateTelegramCode: () => Promise<string>;
   telegramLinked: boolean;
-  // Reset
-  resetDemoData: () => void;
 }
 
 const AppContext = createContext<AppContextType | null>(null);
 
 export function AppProvider({ children }: { children: React.ReactNode }) {
-  const [isConfigured] = useState<boolean>(() => isSupabaseConfigured());
-  const [isDemoMode, setDemoMode] = useState<boolean>(true);
+  const [user, setUser] = useState<User | null>(null);
+  const [authLoading, setAuthLoading] = useState<boolean>(true);
+  const [profile, setProfile] = useState<UserProfile | null>(null);
 
-  // States initialized with demo data or local storage
-  const [profile, setProfile] = useState<UserProfile>(DEMO_PROFILE);
-  const [timetable, setTimetable] = useState<TimetableSlot[]>(DEMO_TIMETABLE);
-  const [assignments, setAssignments] = useState<Assignment[]>(DEMO_ASSIGNMENTS);
-  const [exams, setExams] = useState<Exam[]>(DEMO_EXAMS);
-  const [grades, setGrades] = useState<GradeItem[]>(DEMO_GRADES);
-  const [sessions, setSessions] = useState(DEMO_STUDY_SESSIONS);
-  const [decks, setDecks] = useState<FlashcardDeck[]>(DEMO_FLASHCARD_DECKS);
-  const [flashcards, setFlashcards] = useState<Flashcard[]>(DEMO_FLASHCARDS);
-  const [habits, setHabits] = useState<Habit[]>(DEMO_HABITS);
-  const [habitLogs, setHabitLogs] = useState<HabitLog[]>(DEMO_HABIT_LOGS);
-  const [notes, setNotes] = useState<Note[]>(DEMO_NOTES);
-  const [telegramCode, setTelegramCode] = useState<string>('TH89X2');
+  // Real data collections (initialized EMPTY - no placeholders)
+  const [timetable, setTimetable] = useState<TimetableSlot[]>([]);
+  const [assignments, setAssignments] = useState<Assignment[]>([]);
+  const [exams, setExams] = useState<Exam[]>([]);
+  const [grades, setGrades] = useState<GradeItem[]>([]);
+  const [sessions, setSessions] = useState<{ id?: string; subject: string; duration_minutes: number; completed_at: string }[]>([]);
+  const [decks, setDecks] = useState<FlashcardDeck[]>([]);
+  const [flashcards, setFlashcards] = useState<Flashcard[]>([]);
+  const [habits, setHabits] = useState<Habit[]>([]);
+  const [habitLogs, setHabitLogs] = useState<HabitLog[]>([]);
+  const [notes, setNotes] = useState<Note[]>([]);
+  const [telegramCode, setTelegramCode] = useState<string>('');
   const [telegramLinked, setTelegramLinked] = useState<boolean>(false);
 
-  // Load saved local data if present
-  useEffect(() => {
+  // Fetch all user tables from Supabase
+  const loadUserData = useCallback(async (userId: string) => {
+    const supabase = getSupabaseClient();
+    if (!supabase) return;
+
     try {
-      const savedAssignments = localStorage.getItem('thanaweya_assignments');
-      if (savedAssignments) setAssignments(JSON.parse(savedAssignments));
+      // 1. Profile
+      const { data: profileData } = await supabase
+        .from('profiles')
+        .select('*')
+        .eq('id', userId)
+        .single();
 
-      const savedExams = localStorage.getItem('thanaweya_exams');
-      if (savedExams) setExams(JSON.parse(savedExams));
+      if (profileData) {
+        setProfile(profileData);
+      } else {
+        const defaultProfile: UserProfile = {
+          id: userId,
+          full_name: 'Student',
+          study_division: 'scientific_science',
+          target_percentage: 95.0,
+        };
+        await supabase.from('profiles').insert([defaultProfile]);
+        setProfile(defaultProfile);
+      }
 
-      const savedGrades = localStorage.getItem('thanaweya_grades');
-      if (savedGrades) setGrades(JSON.parse(savedGrades));
+      // 2. Timetable
+      const { data: ttData } = await supabase
+        .from('timetable')
+        .select('*')
+        .eq('user_id', userId)
+        .order('start_time', { ascending: true });
+      if (ttData) setTimetable(ttData);
 
-      const savedNotes = localStorage.getItem('thanaweya_notes');
-      if (savedNotes) setNotes(JSON.parse(savedNotes));
+      // 3. Assignments
+      const { data: asData } = await supabase
+        .from('assignments')
+        .select('*')
+        .eq('user_id', userId)
+        .order('due_date', { ascending: true });
+      if (asData) setAssignments(asData);
 
-      const savedTimetable = localStorage.getItem('thanaweya_timetable');
-      if (savedTimetable) setTimetable(JSON.parse(savedTimetable));
+      // 4. Exams
+      const { data: exData } = await supabase
+        .from('exams')
+        .select('*')
+        .eq('user_id', userId)
+        .order('exam_date', { ascending: true });
+      if (exData) setExams(exData);
 
-      const savedSessions = localStorage.getItem('thanaweya_sessions');
-      if (savedSessions) setSessions(JSON.parse(savedSessions));
+      // 5. Grades
+      const { data: grData } = await supabase
+        .from('grades')
+        .select('*')
+        .eq('user_id', userId)
+        .order('date', { ascending: false });
+      if (grData) setGrades(grData);
 
-      const savedHabits = localStorage.getItem('thanaweya_habits');
-      if (savedHabits) setHabits(JSON.parse(savedHabits));
+      // 6. Study Sessions
+      const { data: ssData } = await supabase
+        .from('study_sessions')
+        .select('*')
+        .eq('user_id', userId)
+        .order('completed_at', { ascending: false });
+      if (ssData) setSessions(ssData);
 
-      const savedHabitLogs = localStorage.getItem('thanaweya_habit_logs');
-      if (savedHabitLogs) setHabitLogs(JSON.parse(savedHabitLogs));
+      // 7. Flashcards & Decks
+      const { data: dkData } = await supabase
+        .from('flashcard_decks')
+        .select('*')
+        .eq('user_id', userId);
+      if (dkData) setDecks(dkData);
 
-      const savedDecks = localStorage.getItem('thanaweya_decks');
-      if (savedDecks) setDecks(JSON.parse(savedDecks));
+      const { data: fcData } = await supabase
+        .from('flashcards')
+        .select('*')
+        .eq('user_id', userId);
+      if (fcData) setFlashcards(fcData);
 
-      const savedCards = localStorage.getItem('thanaweya_cards');
-      if (savedCards) setFlashcards(JSON.parse(savedCards));
-    } catch {
-      // LocalStorage fallback
+      // 8. Habits & Logs
+      const { data: hbData } = await supabase
+        .from('habits')
+        .select('*')
+        .eq('user_id', userId);
+
+      if (hbData && hbData.length > 0) {
+        setHabits(hbData);
+      } else {
+        // Create initial default habits for new user
+        const initialHabits = [
+          { user_id: userId, name: 'Sleep Target (7+ hrs)', type: 'sleep', target_value: 7.5, unit: 'hours' },
+          { user_id: userId, name: 'Daily Revision Hours', type: 'revision', target_value: 5.0, unit: 'hours' },
+          { user_id: userId, name: 'Solved 50+ MCQs', type: 'custom', target_value: 1, unit: 'done' },
+        ];
+        const { data: createdHabits } = await supabase.from('habits').insert(initialHabits).select('*');
+        if (createdHabits) setHabits(createdHabits);
+      }
+
+      const { data: hlData } = await supabase
+        .from('habit_logs')
+        .select('*')
+        .eq('user_id', userId);
+      if (hlData) setHabitLogs(hlData);
+
+      // 9. Notes
+      const { data: ntData } = await supabase
+        .from('notes')
+        .select('*')
+        .eq('user_id', userId)
+        .order('created_at', { ascending: false });
+      if (ntData) setNotes(ntData);
+
+      // 10. Telegram Links
+      const { data: tgData } = await supabase
+        .from('telegram_links')
+        .select('*')
+        .eq('user_id', userId)
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      if (tgData) {
+        setTelegramCode(tgData.link_code);
+        setTelegramLinked(Boolean(tgData.is_linked));
+      }
+    } catch (err) {
+      console.error('Error fetching Supabase data:', err);
     }
   }, []);
 
-  // Save changes to localStorage for offline / demo mode continuity
+  // Supabase Auth listener
   useEffect(() => {
-    try {
-      localStorage.setItem('thanaweya_assignments', JSON.stringify(assignments));
-    } catch {}
-  }, [assignments]);
+    const supabase = getSupabaseClient();
+    if (!supabase) {
+      setAuthLoading(false);
+      return;
+    }
 
-  useEffect(() => {
-    try {
-      localStorage.setItem('thanaweya_exams', JSON.stringify(exams));
-    } catch {}
-  }, [exams]);
+    supabase.auth.getSession().then((res: { data: { session: Session | null } }) => {
+      const currentUser = res.data.session?.user ?? null;
+      setUser(currentUser);
+      if (currentUser) {
+        loadUserData(currentUser.id);
+      }
+      setAuthLoading(false);
+    });
 
-  useEffect(() => {
-    try {
-      localStorage.setItem('thanaweya_grades', JSON.stringify(grades));
-    } catch {}
-  }, [grades]);
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((_event: AuthChangeEvent, session: Session | null) => {
+      const currentUser = session?.user ?? null;
+      setUser(currentUser);
+      if (currentUser) {
+        loadUserData(currentUser.id);
+      } else {
+        setProfile(null);
+        setTimetable([]);
+        setAssignments([]);
+        setExams([]);
+        setGrades([]);
+        setSessions([]);
+        setDecks([]);
+        setFlashcards([]);
+        setHabits([]);
+        setHabitLogs([]);
+        setNotes([]);
+      }
+      setAuthLoading(false);
+    });
 
-  useEffect(() => {
-    try {
-      localStorage.setItem('thanaweya_notes', JSON.stringify(notes));
-    } catch {}
-  }, [notes]);
+    return () => {
+      subscription.unsubscribe();
+    };
+  }, [loadUserData]);
 
-  useEffect(() => {
-    try {
-      localStorage.setItem('thanaweya_timetable', JSON.stringify(timetable));
-    } catch {}
-  }, [timetable]);
-
-  useEffect(() => {
-    try {
-      localStorage.setItem('thanaweya_sessions', JSON.stringify(sessions));
-    } catch {}
-  }, [sessions]);
-
-  useEffect(() => {
-    try {
-      localStorage.setItem('thanaweya_habit_logs', JSON.stringify(habitLogs));
-    } catch {}
-  }, [habitLogs]);
-
-  // Profile
-  const updateProfile = (data: Partial<UserProfile>) => {
-    setProfile((prev) => ({ ...prev, ...data }));
+  const signOut = async () => {
+    const supabase = getSupabaseClient();
+    if (supabase) {
+      await supabase.auth.signOut();
+    }
+    setUser(null);
+    setProfile(null);
   };
 
-  // Timetable Handlers
-  const addTimetableSlot = async (slot: Omit<TimetableSlot, 'id'>) => {
-    const newSlot: TimetableSlot = { ...slot, id: `tt-${Date.now()}` };
-    setTimetable((prev) => [...prev, newSlot]);
-
+  const updateProfile = async (data: Partial<UserProfile>) => {
+    setProfile((prev) => (prev ? { ...prev, ...data } : null));
     const supabase = getSupabaseClient();
-    if (supabase && !isDemoMode) {
-      await supabase.from('timetable').insert([newSlot]);
+    if (supabase && user) {
+      await supabase.from('profiles').update(data).eq('id', user.id);
+    }
+  };
+
+  // Timetable
+  const addTimetableSlot = async (slot: Omit<TimetableSlot, 'id'>) => {
+    const supabase = getSupabaseClient();
+    if (supabase && user) {
+      const { data } = await supabase
+        .from('timetable')
+        .insert([{ ...slot, user_id: user.id }])
+        .select('*')
+        .single();
+      if (data) setTimetable((prev) => [...prev, data]);
+    } else {
+      setTimetable((prev) => [...prev, { ...slot, id: `tt-${Date.now()}` }]);
     }
   };
 
   const deleteTimetableSlot = async (id: string) => {
     setTimetable((prev) => prev.filter((s) => s.id !== id));
     const supabase = getSupabaseClient();
-    if (supabase && !isDemoMode) {
+    if (supabase && user) {
       await supabase.from('timetable').delete().eq('id', id);
     }
   };
 
-  // Assignment Handlers
+  // Assignments
   const addAssignment = async (item: Omit<Assignment, 'id' | 'is_completed'>) => {
-    const newAssignment: Assignment = {
-      ...item,
-      id: `as-${Date.now()}`,
-      is_completed: false,
-      created_at: new Date().toISOString(),
-    };
-    setAssignments((prev) => [newAssignment, ...prev]);
-
     const supabase = getSupabaseClient();
-    if (supabase && !isDemoMode) {
-      await supabase.from('assignments').insert([newAssignment]);
+    if (supabase && user) {
+      const { data } = await supabase
+        .from('assignments')
+        .insert([
+          {
+            ...item,
+            user_id: user.id,
+            is_completed: false,
+          },
+        ])
+        .select('*')
+        .single();
+      if (data) setAssignments((prev) => [data, ...prev]);
+    } else {
+      const fallback = {
+        ...item,
+        id: `as-${Date.now()}`,
+        is_completed: false,
+        created_at: new Date().toISOString(),
+      };
+      setAssignments((prev) => [fallback, ...prev]);
     }
   };
 
   const toggleAssignment = async (id: string) => {
-    let nextStatus = false;
+    const target = assignments.find((a) => a.id === id);
+    if (!target) return;
+    const nextStatus = !target.is_completed;
+
     setAssignments((prev) =>
-      prev.map((a) => {
-        if (a.id === id) {
-          nextStatus = !a.is_completed;
-          return { ...a, is_completed: nextStatus };
-        }
-        return a;
-      })
+      prev.map((a) => (a.id === id ? { ...a, is_completed: nextStatus } : a))
     );
 
     const supabase = getSupabaseClient();
-    if (supabase && !isDemoMode) {
+    if (supabase && user) {
       await supabase.from('assignments').update({ is_completed: nextStatus }).eq('id', id);
     }
   };
@@ -240,195 +345,234 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const deleteAssignment = async (id: string) => {
     setAssignments((prev) => prev.filter((a) => a.id !== id));
     const supabase = getSupabaseClient();
-    if (supabase && !isDemoMode) {
+    if (supabase && user) {
       await supabase.from('assignments').delete().eq('id', id);
     }
   };
 
-  // Exam Handlers
+  // Exams
   const addExam = async (item: Omit<Exam, 'id'>) => {
-    const newExam: Exam = { ...item, id: `ex-${Date.now()}` };
-    setExams((prev) => [...prev, newExam].sort((a, b) => a.exam_date.localeCompare(b.exam_date)));
-
     const supabase = getSupabaseClient();
-    if (supabase && !isDemoMode) {
-      await supabase.from('exams').insert([newExam]);
+    if (supabase && user) {
+      const { data } = await supabase
+        .from('exams')
+        .insert([{ ...item, user_id: user.id }])
+        .select('*')
+        .single();
+      if (data) setExams((prev) => [...prev, data].sort((a, b) => a.exam_date.localeCompare(b.exam_date)));
+    } else {
+      setExams((prev) => [...prev, { ...item, id: `ex-${Date.now()}` }].sort((a, b) => a.exam_date.localeCompare(b.exam_date)));
     }
   };
 
   const deleteExam = async (id: string) => {
     setExams((prev) => prev.filter((e) => e.id !== id));
     const supabase = getSupabaseClient();
-    if (supabase && !isDemoMode) {
+    if (supabase && user) {
       await supabase.from('exams').delete().eq('id', id);
     }
   };
 
-  // Grade Handlers
+  // Grades
   const addGrade = async (item: Omit<GradeItem, 'id'>) => {
-    const newGrade: GradeItem = { ...item, id: `gr-${Date.now()}` };
-    setGrades((prev) => [newGrade, ...prev]);
-
     const supabase = getSupabaseClient();
-    if (supabase && !isDemoMode) {
-      await supabase.from('grades').insert([newGrade]);
+    if (supabase && user) {
+      const { data } = await supabase
+        .from('grades')
+        .insert([{ ...item, user_id: user.id }])
+        .select('*')
+        .single();
+      if (data) setGrades((prev) => [data, ...prev]);
+    } else {
+      setGrades((prev) => [{ ...item, id: `gr-${Date.now()}` }, ...prev]);
     }
   };
 
   const deleteGrade = async (id: string) => {
     setGrades((prev) => prev.filter((g) => g.id !== id));
     const supabase = getSupabaseClient();
-    if (supabase && !isDemoMode) {
+    if (supabase && user) {
       await supabase.from('grades').delete().eq('id', id);
     }
   };
 
-  // Pomodoro Session Handlers
+  // Study Sessions
   const logSession = async (subject: string, minutes: number) => {
     const newSession = {
       subject,
       duration_minutes: minutes,
       completed_at: new Date().toISOString().split('T')[0],
     };
-    setSessions((prev) => [newSession, ...prev]);
 
     const supabase = getSupabaseClient();
-    if (supabase && !isDemoMode) {
-      await supabase.from('study_sessions').insert([newSession]);
+    if (supabase && user) {
+      const { data } = await supabase
+        .from('study_sessions')
+        .insert([{ ...newSession, user_id: user.id }])
+        .select('*')
+        .single();
+      if (data) setSessions((prev) => [data, ...prev]);
+    } else {
+      setSessions((prev) => [newSession, ...prev]);
     }
   };
 
-  // Flashcards Handlers
+  // Flashcards
   const addDeck = async (subject: string, title: string, description?: string) => {
-    const newDeck: FlashcardDeck = {
-      id: `dk-${Date.now()}`,
-      subject,
-      title,
-      description,
-      card_count: 0,
-    };
-    setDecks((prev) => [...prev, newDeck]);
-
     const supabase = getSupabaseClient();
-    if (supabase && !isDemoMode) {
-      await supabase.from('flashcard_decks').insert([newDeck]);
+    if (supabase && user) {
+      const { data } = await supabase
+        .from('flashcard_decks')
+        .insert([{ subject, title, description, user_id: user.id }])
+        .select('*')
+        .single();
+      if (data) setDecks((prev) => [...prev, data]);
+    } else {
+      setDecks((prev) => [...prev, { id: `dk-${Date.now()}`, subject, title, description, card_count: 0 }]);
     }
   };
 
   const addFlashcard = async (deckId: string, question: string, answer: string) => {
-    const newCard: Flashcard = {
-      id: `fc-${Date.now()}`,
-      deck_id: deckId,
-      question,
-      answer,
-      times_reviewed: 0,
-      times_correct: 0,
-    };
-    setFlashcards((prev) => [...prev, newCard]);
-    setDecks((prev) =>
-      prev.map((d) => (d.id === deckId ? { ...d, card_count: (d.card_count || 0) + 1 } : d))
-    );
-
     const supabase = getSupabaseClient();
-    if (supabase && !isDemoMode) {
-      await supabase.from('flashcards').insert([newCard]);
+    if (supabase && user) {
+      const { data } = await supabase
+        .from('flashcards')
+        .insert([{ deck_id: deckId, question, answer, user_id: user.id, times_reviewed: 0, times_correct: 0 }])
+        .select('*')
+        .single();
+      if (data) setFlashcards((prev) => [...prev, data]);
+    } else {
+      setFlashcards((prev) => [...prev, { id: `fc-${Date.now()}`, deck_id: deckId, question, answer, times_reviewed: 0, times_correct: 0 }]);
     }
   };
 
   const recordCardReview = async (cardId: string, isCorrect: boolean) => {
+    const card = flashcards.find((c) => c.id === cardId);
+    if (!card) return;
+
+    const updated = {
+      times_reviewed: card.times_reviewed + 1,
+      times_correct: isCorrect ? card.times_correct + 1 : card.times_correct,
+    };
+
     setFlashcards((prev) =>
-      prev.map((c) => {
-        if (c.id === cardId) {
-          return {
-            ...c,
-            times_reviewed: c.times_reviewed + 1,
-            times_correct: isCorrect ? c.times_correct + 1 : c.times_correct,
-          };
-        }
-        return c;
-      })
+      prev.map((c) => (c.id === cardId ? { ...c, ...updated } : c))
     );
+
+    const supabase = getSupabaseClient();
+    if (supabase && user) {
+      await supabase.from('flashcards').update(updated).eq('id', cardId);
+    }
   };
 
-  // Habits Handlers
+  // Habits
   const todayStr = new Date().toISOString().split('T')[0];
 
   const toggleHabitToday = async (habitId: string) => {
-    setHabitLogs((prev) => {
-      const existing = prev.find((l) => l.habit_id === habitId && l.date === todayStr);
-      if (existing) {
-        return prev.map((l) =>
-          l.id === existing.id ? { ...l, completed: !l.completed } : l
-        );
-      } else {
-        return [
-          ...prev,
-          {
-            id: `hl-${Date.now()}`,
-            habit_id: habitId,
-            date: todayStr,
-            value: 1,
-            completed: true,
-          },
-        ];
-      }
-    });
+    const existing = habitLogs.find((l) => l.habit_id === habitId && l.date === todayStr);
+    const nextCompleted = existing ? !existing.completed : true;
+
+    if (existing) {
+      setHabitLogs((prev) =>
+        prev.map((l) => (l.id === existing.id ? { ...l, completed: nextCompleted } : l))
+      );
+    } else {
+      setHabitLogs((prev) => [
+        ...prev,
+        { id: `hl-${Date.now()}`, habit_id: habitId, date: todayStr, value: 1, completed: true },
+      ]);
+    }
+
+    const supabase = getSupabaseClient();
+    if (supabase && user) {
+      await supabase.from('habit_logs').upsert(
+        {
+          user_id: user.id,
+          habit_id: habitId,
+          date: todayStr,
+          value: 1,
+          completed: nextCompleted,
+        },
+        { onConflict: 'user_id,habit_id,date' }
+      );
+    }
   };
 
   const setHabitValueToday = async (habitId: string, value: number) => {
-    setHabitLogs((prev) => {
-      const existing = prev.find((l) => l.habit_id === habitId && l.date === todayStr);
-      if (existing) {
-        return prev.map((l) =>
-          l.id === existing.id ? { ...l, value, completed: value > 0 } : l
-        );
-      } else {
-        return [
-          ...prev,
-          {
-            id: `hl-${Date.now()}`,
-            habit_id: habitId,
-            date: todayStr,
-            value,
-            completed: value > 0,
-          },
-        ];
-      }
-    });
-  };
+    const existing = habitLogs.find((l) => l.habit_id === habitId && l.date === todayStr);
 
-  // Notes Handlers
-  const addNote = async (content: string, tags: string[] = ['Study']) => {
-    const newNote: Note = {
-      id: `nt-${Date.now()}`,
-      content,
-      tags,
-      is_pinned: false,
-      created_at: new Date().toISOString().split('T')[0],
-    };
-    setNotes((prev) => [newNote, ...prev]);
+    if (existing) {
+      setHabitLogs((prev) =>
+        prev.map((l) => (l.id === existing.id ? { ...l, value, completed: value > 0 } : l))
+      );
+    } else {
+      setHabitLogs((prev) => [
+        ...prev,
+        { id: `hl-${Date.now()}`, habit_id: habitId, date: todayStr, value, completed: value > 0 },
+      ]);
+    }
 
     const supabase = getSupabaseClient();
-    if (supabase && !isDemoMode) {
-      await supabase.from('notes').insert([newNote]);
+    if (supabase && user) {
+      await supabase.from('habit_logs').upsert(
+        {
+          user_id: user.id,
+          habit_id: habitId,
+          date: todayStr,
+          value,
+          completed: value > 0,
+        },
+        { onConflict: 'user_id,habit_id,date' }
+      );
+    }
+  };
+
+  // Notes
+  const addNote = async (content: string, tags: string[] = ['Study']) => {
+    const supabase = getSupabaseClient();
+    if (supabase && user) {
+      const { data } = await supabase
+        .from('notes')
+        .insert([{ content, tags, is_pinned: false, user_id: user.id }])
+        .select('*')
+        .single();
+      if (data) setNotes((prev) => [data, ...prev]);
+    } else {
+      const newNote: Note = {
+        id: `nt-${Date.now()}`,
+        content,
+        tags,
+        is_pinned: false,
+        created_at: new Date().toISOString().split('T')[0],
+      };
+      setNotes((prev) => [newNote, ...prev]);
     }
   };
 
   const togglePinNote = async (id: string) => {
+    const note = notes.find((n) => n.id === id);
+    if (!note) return;
+    const nextPinned = !note.is_pinned;
+
     setNotes((prev) =>
-      prev.map((n) => (n.id === id ? { ...n, is_pinned: !n.is_pinned } : n))
+      prev.map((n) => (n.id === id ? { ...n, is_pinned: nextPinned } : n))
     );
+
+    const supabase = getSupabaseClient();
+    if (supabase && user) {
+      await supabase.from('notes').update({ is_pinned: nextPinned }).eq('id', id);
+    }
   };
 
   const deleteNote = async (id: string) => {
     setNotes((prev) => prev.filter((n) => n.id !== id));
     const supabase = getSupabaseClient();
-    if (supabase && !isDemoMode) {
+    if (supabase && user) {
       await supabase.from('notes').delete().eq('id', id);
     }
   };
 
-  // Telegram Link Code
+  // Telegram Code
   const generateTelegramCode = async (): Promise<string> => {
     const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
     let code = '';
@@ -439,42 +583,24 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     setTelegramLinked(false);
 
     const supabase = getSupabaseClient();
-    if (supabase && !isDemoMode) {
-      const { data: userData } = await supabase.auth.getUser();
-      if (userData.user) {
-        await supabase.from('telegram_links').insert({
-          user_id: userData.user.id,
-          link_code: code,
-          is_linked: false,
-        });
-      }
+    if (supabase && user) {
+      await supabase.from('telegram_links').insert({
+        user_id: user.id,
+        link_code: code,
+        is_linked: false,
+      });
     }
     return code;
-  };
-
-  const resetDemoData = () => {
-    localStorage.clear();
-    setProfile(DEMO_PROFILE);
-    setTimetable(DEMO_TIMETABLE);
-    setAssignments(DEMO_ASSIGNMENTS);
-    setExams(DEMO_EXAMS);
-    setGrades(DEMO_GRADES);
-    setSessions(DEMO_STUDY_SESSIONS);
-    setDecks(DEMO_FLASHCARD_DECKS);
-    setFlashcards(DEMO_FLASHCARDS);
-    setHabits(DEMO_HABITS);
-    setHabitLogs(DEMO_HABIT_LOGS);
-    setNotes(DEMO_NOTES);
   };
 
   return (
     <AppContext.Provider
       value={{
-        isConfigured,
-        isDemoMode,
-        setDemoMode,
+        user,
+        authLoading,
         profile,
         updateProfile,
+        signOut,
         timetable,
         addTimetableSlot,
         deleteTimetableSlot,
@@ -506,7 +632,6 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         telegramCode,
         generateTelegramCode,
         telegramLinked,
-        resetDemoData,
       }}
     >
       {children}

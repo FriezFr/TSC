@@ -2,106 +2,101 @@
 
 @layer base {
   :root {
-    --bg-base: #07090e;
-    --bg-surface: #0e121b;
-    --bg-glass: rgba(255, 255, 255, 0.035);
-    --border-glass: rgba(255, 255, 255, 0.08);
-    --border-highlight: rgba(255, 255, 255, 0.14);
+    --bg-base: #000000;
+    --bg-surface: #0a0a0a;
+    --bg-elevated: #111111;
+    --border-subtle: rgba(255, 255, 255, 0.08);
+    --border-highlight: rgba(255, 255, 255, 0.16);
     --accent-cyan: #00f0ff;
-    --accent-blue: #38bdf8;
-    --accent-glow: rgba(0, 240, 255, 0.25);
   }
 
   body {
-    background-color: var(--bg-base);
-    color: #f1f5f9;
+    background-color: #000000;
+    color: #ededed;
     font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro Text", "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
     min-height: 100vh;
     overflow-x: hidden;
-    letter-spacing: -0.01em;
+    letter-spacing: -0.015em;
   }
 }
 
-/* Apple Liquid Glass Background Glows */
-.bg-liquid-mesh {
-  background-color: #07090e;
-  background-image: 
-    radial-gradient(at 15% 15%, rgba(14, 165, 233, 0.12) 0px, transparent 50%),
-    radial-gradient(at 85% 20%, rgba(99, 102, 241, 0.10) 0px, transparent 50%),
-    radial-gradient(at 50% 80%, rgba(6, 182, 212, 0.08) 0px, transparent 55%),
-    radial-gradient(at 90% 85%, rgba(168, 85, 247, 0.06) 0px, transparent 50%);
-  background-attachment: fixed;
+/* Pure OLED Matte Black Surface Styles */
+.black-surface {
+  background: #0a0a0a;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.8);
 }
 
-/* Glass Panel Base */
-.glass-panel {
-  background: rgba(255, 255, 255, 0.035);
-  backdrop-filter: blur(24px) saturate(190%);
-  -webkit-backdrop-filter: blur(24px) saturate(190%);
+.black-surface-elevated {
+  background: #111111;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.9);
+}
+
+.black-surface-interactive {
+  background: #0a0a0a;
   border: 1px solid rgba(255, 255, 255, 0.08);
-  box-shadow: 
-    0 10px 30px -5px rgba(0, 0, 0, 0.5),
-    inset 0 1px 0 0 rgba(255, 255, 255, 0.12);
+  transition: all 0.2s ease;
+}
+
+.black-surface-interactive:hover {
+  background: #121212;
+  border-color: rgba(255, 255, 255, 0.18);
+  transform: translateY(-1px);
+}
+
+/* Glass panel adapted to OLED pure black */
+.glass-panel {
+  background: rgba(12, 12, 12, 0.85);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.8);
 }
 
 .glass-panel-subtle {
-  background: rgba(255, 255, 255, 0.02);
-  backdrop-filter: blur(16px);
-  -webkit-backdrop-filter: blur(16px);
-  border: 1px solid rgba(255, 255, 255, 0.05);
-  box-shadow: inset 0 1px 0 0 rgba(255, 255, 255, 0.08);
+  background: #080808;
+  border: 1px solid rgba(255, 255, 255, 0.06);
 }
 
 .glass-panel-interactive {
-  background: rgba(255, 255, 255, 0.035);
-  backdrop-filter: blur(24px) saturate(190%);
-  -webkit-backdrop-filter: blur(24px) saturate(190%);
+  background: #0a0a0a;
   border: 1px solid rgba(255, 255, 255, 0.08);
-  box-shadow: 
-    0 10px 30px -5px rgba(0, 0, 0, 0.4),
-    inset 0 1px 0 0 rgba(255, 255, 255, 0.12);
-  transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 .glass-panel-interactive:hover {
-  background: rgba(255, 255, 255, 0.055);
-  border-color: rgba(255, 255, 255, 0.15);
-  transform: translateY(-2px);
-  box-shadow: 
-    0 20px 35px -10px rgba(0, 0, 0, 0.6),
-    0 0 25px -5px rgba(56, 189, 248, 0.15),
-    inset 0 1px 0 0 rgba(255, 255, 255, 0.2);
+  background: #111111;
+  border-color: rgba(255, 255, 255, 0.18);
+  transform: translateY(-1px);
 }
 
-/* Glass Inputs */
+/* Clean Minimal Inputs */
 .glass-input {
-  background: rgba(255, 255, 255, 0.04);
+  background: #0d0d0d;
   border: 1px solid rgba(255, 255, 255, 0.1);
-  color: #f8fafc;
-  backdrop-filter: blur(12px);
+  color: #ffffff;
   transition: all 0.2s ease;
 }
 
 .glass-input:focus {
   outline: none;
-  background: rgba(255, 255, 255, 0.07);
-  border-color: rgba(56, 189, 248, 0.6);
-  box-shadow: 0 0 15px rgba(56, 189, 248, 0.25), inset 0 1px 0 0 rgba(255, 255, 255, 0.15);
+  background: #141414;
+  border-color: #ffffff;
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.3);
 }
 
-/* Glass Buttons */
+/* High Contrast Apple-Style Buttons */
 .glass-button-primary {
-  background: linear-gradient(135deg, #00f0ff 0%, #0284c7 100%);
-  color: #030712;
+  background: #ffffff;
+  color: #000000;
   font-weight: 600;
-  box-shadow: 0 0 20px rgba(0, 240, 255, 0.3), inset 0 1px 0 0 rgba(255, 255, 255, 0.4);
-  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+  transition: all 0.15s ease;
 }
 
 .glass-button-primary:hover {
-  filter: brightness(1.1);
+  background: #e5e5e5;
   transform: translateY(-1px);
-  box-shadow: 0 0 28px rgba(0, 240, 255, 0.45), inset 0 1px 0 0 rgba(255, 255, 255, 0.5);
 }
 
 .glass-button-primary:active {
@@ -109,35 +104,35 @@
 }
 
 .glass-button-secondary {
-  background: rgba(255, 255, 255, 0.06);
+  background: #111111;
   border: 1px solid rgba(255, 255, 255, 0.12);
-  color: #f1f5f9;
-  backdrop-filter: blur(12px);
-  transition: all 0.2s ease;
+  color: #ededed;
+  transition: all 0.15s ease;
 }
 
 .glass-button-secondary:hover {
-  background: rgba(255, 255, 255, 0.1);
-  border-color: rgba(255, 255, 255, 0.2);
+  background: #1c1c1c;
+  border-color: rgba(255, 255, 255, 0.22);
+  color: #ffffff;
 }
 
-/* Custom Scrollbar for Sleek Dark Glass UI */
+/* Custom Minimalist Scrollbar */
 ::-webkit-scrollbar {
-  width: 6px;
-  height: 6px;
+  width: 5px;
+  height: 5px;
 }
 
 ::-webkit-scrollbar-track {
-  background: transparent;
+  background: #000000;
 }
 
 ::-webkit-scrollbar-thumb {
-  background: rgba(255, 255, 255, 0.15);
+  background: #262626;
   border-radius: 9999px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: rgba(255, 255, 255, 0.25);
+  background: #404040;
 }
 
 /* 3D Flip Card animations */

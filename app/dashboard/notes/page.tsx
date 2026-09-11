@@ -3,7 +3,7 @@
 import React, { useState } from 'react';
 import { useApp } from '@/lib/context';
 import { GlassCard } from '@/components/ui/GlassCard';
-import { FileText, Plus, Trash2, Pin, Tag, Sparkles } from 'lucide-react';
+import { FileText, Plus, Trash2, Pin, Tag } from 'lucide-react';
 
 export default function QuickNotesPage() {
   const { notes, addNote, togglePinNote, deleteNote } = useApp();
@@ -25,10 +25,7 @@ export default function QuickNotesPage() {
     setContent('');
   };
 
-  // Collect unique tags
-  const allTags = Array.from(
-    new Set(notes.flatMap((n) => n.tags || []))
-  );
+  const allTags = Array.from(new Set(notes.flatMap((n) => n.tags || [])));
 
   const filteredNotes = notes
     .filter((n) => {
@@ -36,7 +33,6 @@ export default function QuickNotesPage() {
       return n.tags?.includes(selectedTag);
     })
     .sort((a, b) => {
-      // Pinned first, then newest
       if (a.is_pinned && !b.is_pinned) return -1;
       if (!a.is_pinned && b.is_pinned) return 1;
       return (b.created_at || '').localeCompare(a.created_at || '');
@@ -44,79 +40,69 @@ export default function QuickNotesPage() {
 
   return (
     <div className="space-y-6">
-      {/* Top Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div>
-          <div className="flex items-center gap-2.5">
-            <div className="w-9 h-9 rounded-2xl bg-cyan-500/10 border border-cyan-500/20 flex items-center justify-center text-cyan-400 shadow-[0_0_15px_rgba(0,240,255,0.15)]">
-              <FileText className="w-5 h-5" />
-            </div>
-            <h1 className="text-2xl font-black text-white tracking-tight">
-              Quick Study Notes
-            </h1>
-          </div>
-          <p className="text-xs text-slate-400 mt-1">
-            Capture formulas, teacher tips, and instant voice memos forwarded from Telegram.
-          </p>
-        </div>
+      <div>
+        <h1 className="text-2xl font-bold text-white tracking-tight">
+          Quick Notes
+        </h1>
+        <p className="text-xs text-neutral-400 mt-1">
+          Store formulas, rules, and notes forwarded from Telegram.
+        </p>
       </div>
 
-      {/* Add Note Quick Box */}
-      <GlassCard glow className="p-6">
+      {/* Add Box */}
+      <GlassCard className="p-5">
         <form onSubmit={handleAddNote} className="space-y-3">
           <textarea
             rows={3}
             required
-            placeholder="Type your quick note, physics rule, or Arabic grammatical exception..."
             value={content}
             onChange={(e) => setContent(e.target.value)}
-            className="w-full glass-input px-4 py-3 rounded-2xl text-sm resize-none"
+            className="w-full glass-input px-3 py-2 rounded-xl text-xs resize-none"
           />
 
           <div className="flex flex-col sm:flex-row items-center justify-between gap-3">
             <div className="flex items-center gap-2 w-full sm:w-auto">
-              <Tag className="w-4 h-4 text-slate-400" />
+              <Tag className="w-3.5 h-3.5 text-neutral-500" />
               <input
                 type="text"
-                placeholder="Tags (e.g. Physics, Law, Exam)"
                 value={tagInput}
                 onChange={(e) => setTagInput(e.target.value)}
-                className="glass-input px-3 py-1.5 rounded-xl text-xs flex-1 sm:w-56"
+                className="glass-input px-3 py-1.5 rounded-lg text-xs flex-1 sm:w-48"
               />
             </div>
 
             <button
               type="submit"
-              className="w-full sm:w-auto px-5 py-2.5 rounded-xl glass-button-primary text-xs font-bold flex items-center justify-center gap-1.5"
+              className="w-full sm:w-auto px-4 py-2 rounded-xl glass-button-primary text-xs font-bold flex items-center justify-center gap-1.5 cursor-pointer"
             >
-              <Plus className="w-4 h-4" />
+              <Plus className="w-3.5 h-3.5" />
               <span>Save Note</span>
             </button>
           </div>
         </form>
       </GlassCard>
 
-      {/* Tags Filter */}
+      {/* Filter Tags */}
       {allTags.length > 0 && (
         <div className="flex items-center gap-2 overflow-x-auto pb-1">
           <button
             onClick={() => setSelectedTag('all')}
-            className={`px-3 py-1 rounded-xl text-xs font-medium transition-all ${
+            className={`px-3 py-1 rounded-lg text-xs font-medium transition-all ${
               selectedTag === 'all'
-                ? 'bg-cyan-500/20 text-cyan-300 border border-cyan-400/30'
-                : 'bg-white/5 text-slate-400 hover:text-white'
+                ? 'bg-white text-black font-bold'
+                : 'bg-[#111111] text-neutral-400 hover:text-white'
             }`}
           >
-            All Notes ({notes.length})
+            All ({notes.length})
           </button>
           {allTags.map((tag) => (
             <button
               key={tag}
               onClick={() => setSelectedTag(tag)}
-              className={`px-3 py-1 rounded-xl text-xs font-medium transition-all ${
+              className={`px-3 py-1 rounded-lg text-xs font-medium transition-all ${
                 selectedTag === tag
-                  ? 'bg-cyan-500/20 text-cyan-300 border border-cyan-400/30'
-                  : 'bg-white/5 text-slate-400 hover:text-white'
+                  ? 'bg-white text-black font-bold'
+                  : 'bg-[#111111] text-neutral-400 hover:text-white'
               }`}
             >
               #{tag}
@@ -127,35 +113,22 @@ export default function QuickNotesPage() {
 
       {/* Notes Grid */}
       {filteredNotes.length === 0 ? (
-        <GlassCard className="p-12 text-center text-slate-400 space-y-2">
-          <p className="text-sm font-semibold text-slate-300">No notes found</p>
-          <p className="text-xs text-slate-500">
-            Write down a quick thought above or send a message to your Telegram memory bot!
-          </p>
+        <GlassCard className="p-12 text-center text-neutral-500 space-y-2">
+          <FileText className="w-8 h-8 mx-auto text-neutral-600" />
+          <p className="text-sm font-semibold text-neutral-300">No notes saved</p>
+          <p className="text-xs">Type a note above or send a message to your Telegram bot.</p>
         </GlassCard>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
           {filteredNotes.map((note) => (
-            <GlassCard
-              key={note.id}
-              interactive
-              className={`p-5 flex flex-col justify-between group transition-all ${
-                note.is_pinned
-                  ? 'border-cyan-400/40 shadow-[0_0_25px_rgba(0,240,255,0.12)]'
-                  : ''
-              }`}
-            >
+            <GlassCard key={note.id} className="p-4 flex flex-col justify-between group">
               <div>
                 <div className="flex items-center justify-between mb-2">
-                  <div className="flex flex-wrap gap-1.5">
+                  <div className="flex flex-wrap gap-1">
                     {note.tags?.map((t) => (
                       <span
                         key={t}
-                        className={`text-[10px] font-semibold px-2 py-0.5 rounded-md ${
-                          t.toLowerCase() === 'telegram'
-                            ? 'bg-indigo-500/20 text-indigo-300 border border-indigo-500/30'
-                            : 'bg-white/5 text-cyan-400 border border-white/5'
-                        }`}
+                        className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-white/5 text-neutral-400 border border-white/10"
                       >
                         #{t}
                       </span>
@@ -164,29 +137,24 @@ export default function QuickNotesPage() {
 
                   <button
                     onClick={() => togglePinNote(note.id)}
-                    className={`p-1 rounded-lg transition-all ${
-                      note.is_pinned
-                        ? 'text-cyan-400 hover:text-cyan-300'
-                        : 'text-slate-500 hover:text-slate-300 opacity-0 group-hover:opacity-100'
+                    className={`p-1 cursor-pointer ${
+                      note.is_pinned ? 'text-white' : 'text-neutral-600 opacity-0 group-hover:opacity-100'
                     }`}
-                    title={note.is_pinned ? 'Unpin note' : 'Pin to top'}
                   >
-                    <Pin className={`w-3.5 h-3.5 ${note.is_pinned ? 'fill-current' : ''}`} />
+                    <Pin className="w-3.5 h-3.5" />
                   </button>
                 </div>
 
-                <p className="text-xs sm:text-sm text-slate-200 whitespace-pre-wrap leading-relaxed">
+                <p className="text-xs text-neutral-200 whitespace-pre-wrap leading-relaxed">
                   {note.content}
                 </p>
               </div>
 
-              <div className="mt-4 pt-3 border-t border-white/10 flex items-center justify-between text-[10px] text-slate-400">
-                <span className="font-mono">{note.created_at || 'Today'}</span>
-
+              <div className="mt-4 pt-2 border-t border-white/5 flex items-center justify-between text-[10px] text-neutral-500 font-mono">
+                <span>{note.created_at || 'Today'}</span>
                 <button
                   onClick={() => deleteNote(note.id)}
-                  className="opacity-0 group-hover:opacity-100 p-1 rounded-md text-slate-400 hover:text-rose-400 transition-all"
-                  title="Delete note"
+                  className="opacity-0 group-hover:opacity-100 p-1 text-neutral-500 hover:text-red-400 cursor-pointer"
                 >
                   <Trash2 className="w-3.5 h-3.5" />
                 </button>
