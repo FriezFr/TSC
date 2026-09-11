@@ -334,10 +334,21 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ ok: true });
     }
 
+    // Fetch recent notes / study context so the AI remembers recently sent documents
+    const { data: recentNotes } = await supabase
+      .from('notes')
+      .select('content')
+      .eq('user_id', userId)
+      .order('created_at', { ascending: false })
+      .limit(2);
+
+    const recentContext = recentNotes?.map((n: any) => n.content).join('\n---\n');
+
     // Process text with AI
     const aiResponse = await processUserMessageWithAI({
       text: rawText,
       userProfile: profile,
+      recentContext: recentContext || undefined,
     });
 
     // If an action was extracted, execute it in Supabase

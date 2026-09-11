@@ -48,13 +48,14 @@ export async function processUserMessageWithAI(options: {
     data: string; // Base64
   };
   fileName?: string;
+  recentContext?: string;
   userProfile?: {
     full_name?: string;
     study_division?: string;
     target_percentage?: number;
   };
 }): Promise<AIProcessedMessage> {
-  const { text = '', mediaPart, fileName, userProfile } = options;
+  const { text = '', mediaPart, fileName, recentContext, userProfile } = options;
   const apiKey = process.env.GEMINI_API_KEY;
 
   if (!apiKey) {
@@ -83,6 +84,9 @@ export async function processUserMessageWithAI(options: {
   }
   if (fileName) {
     contextPrompt += `\nAttached file name: "${fileName}".`;
+  }
+  if (recentContext) {
+    contextPrompt += `\nRecent Student Context & Uploaded Documents:\n${recentContext.slice(0, 3000)}`;
   }
 
   const parts: (string | Part)[] = [{ text: contextPrompt }];
