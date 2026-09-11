@@ -114,12 +114,12 @@ export async function processUserMessageWithAI(options: {
 
       // Check if there is an ACTION tag at the end
       let action: any = null;
-      const actionMatch = responseText.match(/ACTION:\s*(\{.*\})\s*$/s);
+      const actionMatch = responseText.match(/ACTION:\s*(\{[\s\S]*\})\s*$/);
       if (actionMatch) {
         try {
           action = JSON.parse(actionMatch[1]);
           // Strip the action tag from user reply
-          responseText = responseText.replace(/ACTION:\s*\{.*\}\s*$/s, '').trim();
+          responseText = responseText.replace(/ACTION:\s*\{[\s\S]*\}\s*$/, '').trim();
         } catch {
           // ignore action parse error
         }
