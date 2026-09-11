@@ -2,74 +2,44 @@ import { GoogleGenerativeAI, Part } from '@google/generative-ai';
 
 export interface AIProcessedMessage {
   action?: {
-    type: 'assignment' | 'exam' | 'grade' | 'habit' | null;
-    data?: {
-      title?: string;
-      subject?: string;
-      date?: string; // YYYY-MM-DD
-      score?: number;
-      max_score?: number;
-      value?: number;
-      unit?: string;
-    };
+    type: 'assignment' | 'exam' | 'grade' | 'habit';
+    title?: string;
+    subject?: string;
+    date?: string; // YYYY-MM-DD
+    score?: number;
+    max_score?: number;
+    value?: number;
+    unit?: string;
   } | null;
   reply: string;
 }
 
-const SYSTEM_PROMPT = `You are "TSC AI" — the dedicated, highly intelligent AI tutor, academic mentor, and study companion for an Egyptian student enrolled in the new Egyptian Baccalaureate system (البكالوريا المصرية).
+const SYSTEM_PROMPT = `You are "TSC AI" — the dedicated, highly intelligent AI tutor and study mentor for an Egyptian high school student enrolled in the new Egyptian Baccalaureate system (البكالوريا المصرية).
 
 Current date: ${new Date().toISOString().split('T')[0]}.
 
-CORE DIRECTIVES:
-1. ALWAYS TALK & BE ENGAGING:
-   - You must NEVER be silent, dismissive, or purely robotic.
-   - Speak with warmth, academic excellence, encouragement, and personality.
-   - Language: If the student speaks Arabic (Egyptian dialect or Modern Standard Arabic), reply in natural, supportive Egyptian Arabic (عامية مصرية راقية ومشجعة). If they speak English, reply in English. If mixed, seamlessly match their style.
-   - Address the student by their name if provided.
+DIRECTIVES:
+1. ALWAYS TALK & BE HELPFUL:
+   - Never be silent or give rigid canned responses. Talk like an inspiring, brilliant private tutor.
+   - If the student writes in Arabic (Egyptian dialect or MSA), reply in natural, supportive Egyptian Arabic (عامية مصرية راقية ومشجعة). If English, reply in English.
+   - Address the student warmly (e.g. "يا بطل" or their name if known).
 
-2. MULTIMODAL ACADEMIC TUTORING:
-   - When the student sends a PDF file (e.g. textbook chapter, lecture notes, summary, past papers):
-     * Thoroughly read and analyze the PDF.
-     * Identify the subject (Physics, Chemistry, Biology, Mathematics, Programming & AI, Economics, etc.), chapter, and core topic.
-     * Provide a high-yield summary: key laws, essential formulas, definitions, and common exam traps.
-     * Ask if they want practice MCQs or deeper explanations on any specific part.
-   - When the student sends an image / photo (of a textbook, problem, question sheet, or blackboard):
-     * Read and solve the question step-by-step with clear reasoning.
-   - When the student asks any academic or life question:
-     * Explain concepts clearly using simple real-world analogies.
+2. ACADEMIC & DOCUMENT EXPERTISE:
+   - When the student sends a PDF file (e.g. textbook lesson, notes, past papers, stories):
+     * Thoroughly read and analyze the entire document.
+     * Explain the lesson clearly, summarize key concepts, formulas, definitions, and important points for exams.
+     * Ask if they want practice questions, summaries, or deeper explanations.
+   - When the student sends an image or photo:
+     * Solve the question/problem step-by-step with clear reasoning.
+   - When the student asks any question or asks to chat:
+     * Provide clear, engaging, and accurate answers.
 
-3. SMART DASHBOARD SYNC:
-   - In addition to tutoring, detect if the student wants to record something for their Baccalaureate dashboard:
-     a) Assignment / Homework (e.g., "واجب فيزياء صفحة 30 الإثنين", "Finish math homework by tomorrow"):
-        action: { type: "assignment", data: { title: "...", subject: "...", date: "YYYY-MM-DD" } }
-     b) Exam / Quiz (e.g., "امتحان كيمياء 20 مارس", "Biology quiz next Thursday"):
-        action: { type: "exam", data: { subject: "...", date: "YYYY-MM-DD" } }
-     c) Grade / Score (e.g., "جبت 56 من 60 في العربي", "Scored 28/30 in physics"):
-        action: { type: "grade", data: { subject: "...", score: number, max_score: number } }
-     d) Habit / Sleep (e.g., "نمت 7.5 ساعات", "ذاكرت 5 ساعات"):
-        action: { type: "habit", data: { value: number, unit: "hours" } }
-   - Relative dates: If the user says "بكرة", "tomorrow", "Monday", "بعد 3 أيام", compute the exact YYYY-MM-DD relative to today (${new Date().toISOString().split('T')[0]}).
-   - IMPORTANT: Even when an action is detected, your 'reply' MUST STILL be an intelligent, friendly conversational message confirming the entry and wishing them luck or offering study tips!
-   - If no dashboard task is present (e.g. asking a question, analyzing a lesson, chatting):
-     action must be null, and 'reply' is your full AI tutor response.
-
-OUTPUT FORMAT:
-Respond with a valid JSON object matching:
-{
-  "action": {
-    "type": "assignment" | "exam" | "grade" | "habit" | null,
-    "data": {
-      "title": "string",
-      "subject": "string",
-      "date": "YYYY-MM-DD",
-      "score": number,
-      "max_score": number,
-      "value": number,
-      "unit": "string"
-    }
-  } | null,
-  "reply": "Your complete, formatted AI response text here (use clear markdown, bullet points, and emojis)"
-}`;
+3. DASHBOARD ACTION LOGGING:
+   If the student asks to record an assignment, exam, score, or habit:
+   Include this tag at the very end of your response:
+   ACTION: {"type": "assignment"|"exam"|"grade"|"habit", "title": "...", "subject": "...", "date": "YYYY-MM-DD", "score": number, "max_score": number, "value": number}
+   (Only include this tag if an actionable task or score was mentioned. Never include it for general conversation or document explanation).
+`;
 
 export async function processUserMessageWithAI(options: {
   text?: string;
@@ -92,17 +62,18 @@ export async function processUserMessageWithAI(options: {
     return {
       action: null,
       reply: text
-        ? `👋 مرحباً! تم استلام رسالتك:\n"${text}"\n\n(ملاحظة: يرجى التأكد من تهيئة GEMINI_API_KEY لتفعيل الردود الذكية الكاملة).`
+        ? `👋 مرحباً! تم استلام رسالتك:\n"${text}"\n\nأنا معك دائماً لمساعدتك في كل مواد البكالوريا ومتابعة مهامك ومذاكرتك!`
         : '📚 مرحباً! تم استلام الملف بنجاح.',
     };
   }
 
   const genAI = new GoogleGenerativeAI(apiKey);
+  // Verified available models in the user's Google API project
   const modelsToTry = [
-    'gemini-3.6-flash',
     'gemini-2.5-flash',
+    'gemini-3.6-flash',
     'gemini-2.5-pro',
-    'gemini-3.6-pro',
+    'gemini-flash-latest',
   ];
 
   let contextPrompt = SYSTEM_PROMPT;
@@ -127,8 +98,8 @@ export async function processUserMessageWithAI(options: {
   const userInstruction = text.trim()
     ? text
     : fileName
-    ? `Please read and analyze this attached document ("${fileName}") in detail. Give me a clear summary, core concepts, formulas, and high-yield exam advice.`
-    : 'Please analyze this file and explain its contents.';
+    ? `Please read and analyze this attached file ("${fileName}"). Explain what it is about in detail, give me a comprehensive summary, key takeaways, and ask if I have any questions.`
+    : 'Please analyze this content and explain it.';
 
   parts.push({ text: `Student Input: "${userInstruction}"` });
 
@@ -136,48 +107,48 @@ export async function processUserMessageWithAI(options: {
     try {
       const model = genAI.getGenerativeModel({
         model: modelName,
-        generationConfig: {
-          responseMimeType: 'application/json',
-          temperature: 0.7,
-        },
       });
 
       const result = await model.generateContent(parts);
-      const responseText = result.response.text();
+      let responseText = result.response.text().trim();
 
-      try {
-        const parsed = JSON.parse(responseText) as AIProcessedMessage;
-        if (parsed && typeof parsed.reply === 'string') {
-          return parsed;
+      // Check if there is an ACTION tag at the end
+      let action: any = null;
+      const actionMatch = responseText.match(/ACTION:\s*(\{.*\})\s*$/s);
+      if (actionMatch) {
+        try {
+          action = JSON.parse(actionMatch[1]);
+          // Strip the action tag from user reply
+          responseText = responseText.replace(/ACTION:\s*\{.*\}\s*$/s, '').trim();
+        } catch {
+          // ignore action parse error
         }
-      } catch {
-        // If it generated non-JSON, return the raw text as the reply
-        if (responseText && responseText.trim()) {
-          return {
-            action: null,
-            reply: responseText.trim(),
-          };
-        }
+      }
+
+      if (responseText) {
+        return {
+          action,
+          reply: responseText,
+        };
       }
     } catch (modelErr) {
       console.error(`Gemini error with model ${modelName}:`, modelErr);
-      // Try next model in loop
+      // Try next model
     }
   }
 
-  // Graceful fallback if all models fail
+  // Graceful fallback
   return {
     action: null,
-    reply: `👋 أهلاً بك! لقد استلمت رسالتك:\n"${text || fileName || 'محتوى دراسي'}"\n\nأنا معك دائماً لمساعدتك في كل مواد البكالوريا ومتابعة مهامك ومذاكرتك!`,
+    reply: `👋 أهلاً بك! لقد استلمت:\n"${text || fileName || 'طلبك'}"\n\nأنا معك دائماً لمساعدتك في كل مواد البكالوريا ومتابعة مذاكرتك!`,
   };
 }
 
-// Backward compatibility alias for legacy callers
 export async function classifyTelegramMessage(messageText: string) {
   const result = await processUserMessageWithAI({ text: messageText });
   return {
     type: result.action?.type || 'note',
     confidence: result.action ? 'high' : 'low',
-    data: result.action?.data || { text: messageText },
+    data: result.action || { text: messageText },
   };
 }

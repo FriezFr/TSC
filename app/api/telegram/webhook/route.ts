@@ -358,43 +358,44 @@ export async function POST(req: NextRequest) {
 async function executeDashboardAction(
   supabase: any,
   userId: string,
-  action: { type: string | null; data?: any }
+  action: any
 ) {
-  if (!action.type || !action.data) return;
+  if (!action || !action.type) return;
 
   try {
     const today = new Date().toISOString().split('T')[0];
+    const data = action.data || action;
 
     if (action.type === 'assignment') {
       await supabase.from('assignments').insert({
         user_id: userId,
-        title: action.data.title || 'Homework',
-        subject: action.data.subject || 'General',
-        due_date: action.data.date || today,
+        title: data.title || 'Homework',
+        subject: data.subject || 'General',
+        due_date: data.date || today,
         priority: 'medium',
         is_completed: false,
       });
     } else if (action.type === 'exam') {
       await supabase.from('exams').insert({
         user_id: userId,
-        subject: action.data.subject || 'General',
-        exam_date: action.data.date || today,
-        notes: action.data.title || undefined,
+        subject: data.subject || 'General',
+        exam_date: data.date || today,
+        notes: data.title || undefined,
       });
     } else if (action.type === 'grade') {
-      const score = Number(action.data.score) || 0;
-      const maxScore = Number(action.data.max_score) || 60;
+      const score = Number(data.score) || 0;
+      const maxScore = Number(data.max_score) || 60;
       await supabase.from('grades').insert({
         user_id: userId,
-        subject: action.data.subject || 'General',
-        title: action.data.title || `Telegram Log (${today})`,
+        subject: data.subject || 'General',
+        title: data.title || `Telegram Log (${today})`,
         score,
         max_score: maxScore,
         weight: 1.0,
         date: today,
       });
     } else if (action.type === 'habit') {
-      const habitValue = Number(action.data.value) || 1;
+      const habitValue = Number(data.value) || 1;
       const { data: userHabits } = await supabase.from('habits').select('*').eq('user_id', userId);
       const targetHabit = userHabits?.[0];
 
@@ -418,19 +419,22 @@ async function executeDashboardAction(
 
 export async function GET() {
   const apiKey = process.env.GEMINI_API_KEY;
+  if (!apiKey) return NextResponse.json({ error: 'No key' });
+
   try {
-    const listRes = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models?key=${apiKey}`
-    );
-    const listData = await listRes.json();
+    const { GoogleGenerativeAI } = await import('@google/generative-ai');
+    const genAI = new GoogleGenerativeAI(apiKey);
+    const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash' });
+    const res = await model.generateContent('Hello, are you online? Respond in one sentence.');
     return NextResponse.json({
       status: 'online',
-      models: listData.models ? listData.models.map((m: any) => m.name) : listData,
+      testResponse: res.response.text(),
     });
   } catch (err: any) {
     return NextResponse.json({
-      status: 'online',
-      error: err.message,
+      status: 'error',
+      message: err.message,
+      stack: err.stack,
     });
   }
 }
