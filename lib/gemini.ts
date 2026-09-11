@@ -70,10 +70,11 @@ export async function processUserMessageWithAI(options: {
   const genAI = new GoogleGenerativeAI(apiKey);
   // Verified available models in the user's Google API project
   const modelsToTry = [
-    'gemini-2.5-flash',
     'gemini-3.6-flash',
-    'gemini-2.5-pro',
     'gemini-flash-latest',
+    'gemini-3.7-flash',
+    'gemini-3.8-flash',
+    'gemini-pro-latest',
   ];
 
   let contextPrompt = SYSTEM_PROMPT;

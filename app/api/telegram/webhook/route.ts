@@ -424,7 +424,7 @@ export async function GET() {
   try {
     const { GoogleGenerativeAI } = await import('@google/generative-ai');
     const genAI = new GoogleGenerativeAI(apiKey);
-    const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash' });
+    const model = genAI.getGenerativeModel({ model: 'gemini-3.6-flash' });
     const res = await model.generateContent('Hello, are you online? Respond in one sentence.');
     return NextResponse.json({
       status: 'online',
