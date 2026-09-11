@@ -417,9 +417,20 @@ async function executeDashboardAction(
 }
 
 export async function GET() {
-  return NextResponse.json({
-    status: 'online',
-    service: 'Thanaweya Baccalaureate Multimodal AI Telegram Webhook',
-    aiEngine: 'Google Gemini 1.5 Flash (Multimodal: PDF, Images, Voice, Text)',
-  });
+  const apiKey = process.env.GEMINI_API_KEY;
+  try {
+    const listRes = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models?key=${apiKey}`
+    );
+    const listData = await listRes.json();
+    return NextResponse.json({
+      status: 'online',
+      models: listData.models ? listData.models.map((m: any) => m.name) : listData,
+    });
+  } catch (err: any) {
+    return NextResponse.json({
+      status: 'online',
+      error: err.message,
+    });
+  }
 }
