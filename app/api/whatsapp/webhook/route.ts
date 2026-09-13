@@ -38,8 +38,12 @@ export async function POST(req: NextRequest) {
     if (contentType.includes('application/json')) {
       const body = await req.json();
 
-      // Meta Cloud API structure
-      const message = body?.entry?.[0]?.changes?.[0]?.value?.messages?.[0];
+      // Meta Cloud API structure (supports live payloads, entry.changes, and dashboard test samples)
+      const message =
+        body?.entry?.[0]?.changes?.[0]?.value?.messages?.[0] ||
+        body?.value?.messages?.[0] ||
+        body?.messages?.[0];
+
       if (!message) {
         return NextResponse.json({ status: 'ignored', note: 'No message in payload' });
       }
