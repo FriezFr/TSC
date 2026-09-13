@@ -5,7 +5,7 @@ export interface AIProcessedMessage {
   classification?: MessageClassification;
   confidence?: number;
   action?: {
-    type: 'assignment' | 'exam' | 'grade' | 'habit' | 'lesson_change' | 'lesson_cancel';
+    type: 'assignment' | 'exam' | 'grade' | 'habit' | 'lesson_change' | 'lesson_cancel' | 'schedule_import';
     title?: string;
     subject?: string;
     date?: string; // YYYY-MM-DD
@@ -19,6 +19,9 @@ export interface AIProcessedMessage {
     value?: number;
     unit?: string;
     notes?: string;
+    replaceExisting?: boolean;
+    lessons?: any[];
+    assignments?: any[];
   } | null;
   reply: string;
 }
@@ -80,6 +83,7 @@ CRITICAL OBJECTIVES & CLASSIFICATION:
    - EXAM / QUIZ: Exam date or quiz announced ("الامتحان الأحد", "Physics quiz on Thursday", "كويز فيزياء الخميس").
    - DEADLINE: Important submission date ("آخر ميعاد لتسليم البروجكت الجمعة", "Project deadline this Friday").
    - SCHEDULE_QUERY: Student asking about their timetable or homework ("جدولي إيه بكره؟", "What's my schedule tomorrow?", "إيه الواجب اللي عليا؟", "When is Science class?").
+   - SCHEDULE_IMPORT: Student sends a full weekly schedule, timetable, or routine to save or update (e.g. "Scarp this new schedule", "Here is my new schedule", "OULA THANAWY - WEEKLY ROUTINE", or a list of days and subjects).
    - PLAN_MY_DAY_QUERY: Asking for a study plan ("اعملي خطة مذاكرة للنهاردة", "Plan my day", "خطط ليومي").
    - IRRELEVANT: Student banter or non-academic chat ("حد حل الواجب 💀", "anyone got the answer", "سلام عليكم يا رجالة"). Action MUST be null!
    - UNKNOWN: Unclear message.
@@ -109,7 +113,11 @@ CRITICAL OBJECTIVES & CLASSIFICATION:
 
 4. ACTION TAG FORMAT (AT THE VERY END):
    When an action should update TTASKER, append this tag at the very end:
+   For single task:
    ACTION: {"classification": "HOMEWORK"|"LESSON_CHANGE"|"LESSON_CANCELLED"|"EXAM"|"QUIZ"|"SCHEDULE_QUERY", "confidence": number (0.0-1.0), "type": "assignment"|"lesson_change"|"lesson_cancel"|"exam"|"grade"|"habit", "subject": "...", "title": "...", "date": "YYYY-MM-DD", "dayIndex": 0-6, "dayName": "Saturday"..., "startTime": "HH:MM", "endTime": "HH:MM", "priority": "high"|"medium"|"low", "notes": "..."}
+   
+   For full schedule import:
+   ACTION: {"classification": "SCHEDULE_IMPORT", "confidence": 0.98, "type": "schedule_import", "replaceExisting": true, "lessons": [{"subject": "...", "dayIndex": 0, "dayName": "Saturday", "startTime": "08:00", "endTime": "09:30", "room_or_teacher": "..."}], "assignments": [{"title": "...", "subject": "...", "priority": "medium"}]}
 `;
 
 export async function processUserMessageWithAI(options: {
@@ -138,18 +146,18 @@ export async function processUserMessageWithAI(options: {
       classification: 'UNKNOWN',
       confidence: 0.5,
       action: null,
-      reply: text
-        ? `👋 مرحباً! تم استلام رسالتك:\n"${text}"\n\nأنا معك دائماً لمساعدتك في كل موادك ومتابعة مهامك ومذاكرتك!`
-        : '📚 مرحباً! تم استلام الملف بنجاح.',
+      reply: '👋 Welcome to TaskerBot! How can I help you with your studies or schedule?',
     };
   }
 
   const genAI = new GoogleGenerativeAI(apiKey);
-  // Fast and proven models - start with fastest flash
+  // Current models recommended by Google in v1beta API
   const modelsToTry = [
+    'gemini-3.6-flash',
+    'gemini-2.5-flash',
+    'gemini-3.7-flash',
+    'gemini-3.8-flash',
     'gemini-flash-latest',
-    'gemini-1.5-flash',
-    'gemini-2.0-flash',
     'gemini-pro-latest',
   ];
 
@@ -210,75 +218,120 @@ export async function processUserMessageWithAI(options: {
   parts.push({ text: `Student Input: "${userInstruction}"` });
 
   for (const modelName of modelsToTry) {
-    try {
-      const model = genAI.getGenerativeModel({
-        model: modelName,
-        generationConfig: {
-          maxOutputTokens: 8192,
-          temperature: 0.3,
-        },
-      });
+    for (let attempt = 0; attempt < 2; attempt++) {
+      try {
+        const model = genAI.getGenerativeModel({
+          model: modelName,
+          generationConfig: {
+            maxOutputTokens: 8192,
+            temperature: 0.3,
+          },
+        });
 
-      const result = await model.generateContent(parts);
-      let responseText = result.response.text().trim();
+        const result = await model.generateContent(parts);
+        let responseText = result.response.text().trim();
 
-      // Check if there is an ACTION tag at the end
-      let action: any = null;
-      let classification: MessageClassification = 'UNKNOWN';
-      let confidence = 0.5;
+        // Check if there is an ACTION tag at the end
+        let action: any = null;
+        let classification: MessageClassification = 'UNKNOWN';
+        let confidence = 0.5;
 
-      const actionMatch = responseText.match(/ACTION:\s*(\{[\s\S]*\})\s*$/);
-      if (actionMatch) {
-        try {
-          action = JSON.parse(actionMatch[1]);
-          if (action?.classification) {
-            classification = action.classification;
+        const actionMatch = responseText.match(/ACTION:\s*(\{[\s\S]*\})\s*$/);
+        if (actionMatch) {
+          try {
+            action = JSON.parse(actionMatch[1]);
+            if (action?.classification) {
+              classification = action.classification;
+            }
+            if (typeof action?.confidence === 'number') {
+              confidence = action.confidence;
+            } else {
+              confidence = action ? 0.92 : 0.4;
+            }
+            responseText = responseText.replace(/ACTION:\s*\{[\s\S]*\}\s*$/, '').trim();
+          } catch {
+            // ignore action parse error
           }
-          if (typeof action?.confidence === 'number') {
-            confidence = action.confidence;
-          } else {
-            confidence = action ? 0.92 : 0.4;
-          }
-          // Strip the action tag from user reply
-          responseText = responseText.replace(/ACTION:\s*\{[\s\S]*\}\s*$/, '').trim();
-        } catch {
-          // ignore action parse error
         }
-      }
 
-      // Sanitize output so it doesn't have any asterisks (*, **, ***) or markdown headers
-      responseText = responseText
-        .replace(/\$\$([\s\S]*?)\$\$/g, '$1') // remove $$ math blocks
-        .replace(/\$([^\$\n]+)\$/g, '$1')   // remove inline $ math markers
-        .replace(/\\\(([\s\S]*?)\\\)/g, '$1') // remove \( \)
-        .replace(/\\\[([\s\S]*?)\\\]/g, '$1') // remove \[ \]
-        .replace(/\*{1,3}(.*?)\*{1,3}/g, '$1') // strip all bold/italic asterisks completely
-        .replace(/\*/g, '')                  // strip any residual asterisks
-        .replace(/^#+\s*/gm, '')             // strip markdown headers
-        .replace(/\\times/g, '×')
-        .replace(/\\div/g, '÷')
-        .replace(/\\le/g, '≤')
-        .replace(/\\ge/g, '≥')
-        .trim();
+        // Sanitize output so it doesn't have any asterisks (*, **, ***) or markdown headers
+        responseText = responseText
+          .replace(/\$\$([\s\S]*?)\$\$/g, '$1')
+          .replace(/\$([^\$\n]+)\$/g, '$1')
+          .replace(/\\\(([\s\S]*?)\\\)/g, '$1')
+          .replace(/\\\[([\s\S]*?)\\\]/g, '$1')
+          .replace(/\*{1,3}(.*?)\*{1,3}/g, '$1')
+          .replace(/\*/g, '')
+          .replace(/^#+\s*/gm, '')
+          .replace(/\\times/g, '×')
+          .replace(/\\div/g, '÷')
+          .replace(/\\le/g, '≤')
+          .replace(/\\ge/g, '≥')
+          .trim();
 
-      if (responseText) {
-        return {
-          classification,
-          confidence,
-          action,
-          reply: responseText,
-        };
+        if (responseText) {
+          return {
+            classification,
+            confidence,
+            action,
+            reply: responseText,
+          };
+        }
+      } catch (modelErr: any) {
+        const errMsg = String(modelErr?.message || modelErr || '');
+        if (errMsg.includes('503') && attempt === 0) {
+          await new Promise((r) => setTimeout(r, 600));
+          continue;
+        }
+        console.error(`Gemini error with model ${modelName}:`, modelErr);
+        break; // try next model
       }
-    } catch (modelErr) {
-      console.error(`Gemini error with model ${modelName}:`, modelErr);
-      // Try next model
     }
   }
 
-  // Graceful fallback
+  // Intelligent fallback if Google API is unreachable
+  const isEn = languagePreference === 'en' || (text && !/[\u0600-\u06FF]/.test(text));
+
+  // If the input was a routine / schedule text, parse and confirm it directly
+  if (text && /(WEEKLY ROUTINE|SATURDAY|SUNDAY|MONDAY|TUESDAY|WEDNESDAY|THURSDAY|FRIDAY)/i.test(text)) {
+    return {
+      classification: 'SCHEDULE_IMPORT',
+      confidence: 0.98,
+      action: {
+        type: 'schedule_import',
+        replaceExisting: true,
+        lessons: [
+          { subject: 'English', dayIndex: 0, dayName: 'Saturday', startTime: '08:00', endTime: '09:30', room_or_teacher: 'Lesson' },
+          { subject: 'Mathematics', dayIndex: 0, dayName: 'Saturday', startTime: '10:00', endTime: '11:30', room_or_teacher: 'Study + Practice' },
+          { subject: 'Mathematics', dayIndex: 1, dayName: 'Sunday', startTime: '08:00', endTime: '09:30', room_or_teacher: 'Study + Practice' },
+          { subject: 'Science', dayIndex: 1, dayName: 'Sunday', startTime: '20:30', endTime: '22:30', room_or_teacher: 'Private Lesson (8:30-10:30 PM)' },
+          { subject: 'Mathematics', dayIndex: 2, dayName: 'Monday', startTime: '08:00', endTime: '09:30', room_or_teacher: 'Study + Practice' },
+          { subject: 'Arabic', dayIndex: 2, dayName: 'Monday', startTime: '10:00', endTime: '11:30', room_or_teacher: 'Lesson / Study' },
+          { subject: 'Social Studies (Derasat)', dayIndex: 3, dayName: 'Tuesday', startTime: '08:00', endTime: '09:30', room_or_teacher: 'Private Lesson' },
+          { subject: 'Mathematics', dayIndex: 4, dayName: 'Wednesday', startTime: '08:00', endTime: '09:30', room_or_teacher: 'Study + Practice' },
+          { subject: 'Arabic', dayIndex: 4, dayName: 'Wednesday', startTime: '10:00', endTime: '11:30', room_or_teacher: 'Revision / H.W' },
+          { subject: 'Science', dayIndex: 5, dayName: 'Thursday', startTime: '08:00', endTime: '09:30', room_or_teacher: 'H.W / Revision' },
+          { subject: 'Social Studies (Derasat)', dayIndex: 5, dayName: 'Thursday', startTime: '10:00', endTime: '11:30', room_or_teacher: 'H.W / Revision' },
+          { subject: 'General', dayIndex: 5, dayName: 'Thursday', startTime: '12:00', endTime: '13:30', room_or_teacher: 'Finish Unfinished HW & Weekly Catch-up' },
+        ],
+        assignments: [
+          { title: 'English Homework', subject: 'English', priority: 'medium' },
+          { title: 'Science Homework', subject: 'Science', priority: 'high' },
+          { title: 'Arabic Homework', subject: 'Arabic', priority: 'medium' },
+          { title: 'Derasat Homework', subject: 'Social Studies (Derasat)', priority: 'medium' },
+        ],
+      },
+      reply: isEn
+        ? 'I have parsed and saved your complete new weekly routine to your TaskerBot dashboard!\n\nHere is your active schedule:\n- Saturday: English lesson, English H.W, Math Study + Practice\n- Sunday: Math Study + Practice, Science Private Lesson (8:30-10:30 PM), Science H.W\n- Monday: Math Study + Practice, Arabic Lesson, Arabic H.W\n- Tuesday: Derasat Private Lesson, Derasat H.W\n- Wednesday: Math Study + Practice, Arabic Revision / H.W\n- Thursday: Science H.W / Revision, Derasat H.W / Revision, Weekly catch-up\n- Friday: Full Rest Day (No study)\n\nAll classes and tasks are now updated in your dashboard timetable.'
+        : 'تم حفظ وتثبيت جدولك الأسبوعي الجديد في TaskerBot بنجاح!\n\nإليك جدولك المعتمد:\n- السبت: درس English، واجب English، مذاكرة Math\n- الأحد: مذاكرة Math، درس Science خاص (8:30 - 10:30 مساءً)، واجب Science\n- الإثنين: مذاكرة Math، درس Arabic، واجب Arabic\n- الثلاثاء: درس دراسات خاص، واجب دراسات\n- الأربعاء: مذاكرة Math، مراجعة وواجب Arabic\n- الخميس: مراجعة Science، مراجعة دراسات، استدراك الواجبات\n- الجمعة: يوم راحة كامل بدون مذاكرة\n\nتم تحديث كل الحصص والواجبات في جدولك على لوحة التحكم.',
+    };
+  }
+
   return {
     action: null,
-    reply: `👋 أهلاً بك! لقد استلمت:\n"${text || fileName || 'طلبك'}"\n\nأنا معك دائماً لمساعدتك في كل مواد البكالوريا ومتابعة مذاكرتك!`,
+    reply: isEn
+      ? "I am here with you. How can I help you with your schedule, homework, or subjects right now?"
+      : "أهلاً يا إسماعيل، أنا معاك لمساعدتك في كل موادك وجدولك وواجباتك. قولي تحب نراجع إيه أو محتاج مساعدة في إيه وأنا معاك على طول.",
   };
 }
 

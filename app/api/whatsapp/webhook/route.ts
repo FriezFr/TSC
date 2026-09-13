@@ -296,6 +296,53 @@ async function executeWhatsAppAction(supabase: any, userId: string, action: any,
     const today = new Date().toISOString().split('T')[0];
     const data = action.data || action;
 
+    // 0. FULL SCHEDULE IMPORT / ROUTINE UPDATE
+    if (action.type === 'schedule_import') {
+      const lessons = Array.isArray(data.lessons) ? data.lessons : [];
+      const assignments = Array.isArray(data.assignments) ? data.assignments : [];
+
+      if (data.replaceExisting !== false) {
+        await supabase.from('timetable').delete().eq('user_id', userId);
+      }
+
+      const rowsToInsert = lessons.map((l: any) => ({
+        user_id: userId,
+        subject: l.subject || 'General',
+        day_of_week: typeof l.dayIndex === 'number' ? l.dayIndex : 0,
+        start_time: l.startTime || '08:00',
+        end_time: l.endTime || '09:30',
+        room_or_teacher: l.room_or_teacher || l.notes || 'Weekly Routine',
+      }));
+
+      if (rowsToInsert.length > 0) {
+        await supabase.from('timetable').insert(rowsToInsert);
+      }
+
+      if (assignments.length > 0) {
+        const hwRows = assignments.map((a: any) => ({
+          user_id: userId,
+          title: a.title || 'Homework',
+          subject: a.subject || 'General',
+          due_date: a.date || a.due_date || today,
+          priority: a.priority || 'medium',
+          is_completed: false,
+        }));
+        await supabase.from('assignments').insert(hwRows);
+      }
+
+      await supabase.from('ai_activity_logs').insert({
+        user_id: userId,
+        action_type: 'UPDATE_LESSON',
+        title: 'Import Weekly Routine',
+        description: `Imported ${rowsToInsert.length} classes and ${assignments.length} assignments`,
+        source: 'whatsapp',
+      });
+
+      return isEnglish
+        ? `✅ Updated your weekly timetable with ${rowsToInsert.length} classes and registered your weekly homework tasks!`
+        : `✅ تم تحديث وتثبيت جدولك الأسبوعي الجديد (${rowsToInsert.length} حصة) وتسجيل الواجبات في نظام TaskerBot!`;
+    }
+
     // A. LESSON CHANGE / RESCHEDULE
     if (action.type === 'lesson_change') {
       const subject = data.subject || 'General';

@@ -240,6 +240,7 @@ export type MessageClassification =
   | 'STUDY_MATERIAL'
   | 'REMINDER'
   | 'SCHEDULE_QUERY'
+  | 'SCHEDULE_IMPORT'
   | 'PLAN_MY_DAY_QUERY'
   | 'IRRELEVANT'
   | 'UNKNOWN';
