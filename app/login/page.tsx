@@ -326,7 +326,7 @@ export default function AuthPage() {
                       required
                       value={fullName}
                       onChange={(e) => setFullName(e.target.value)}
-                      placeholder={language === 'ar' ? 'مثال: إسماعيل محمد حطاب' : 'e.g. Ismail Mohamed Hatab'}
+                      placeholder={language === 'ar' ? 'مثال: محمد صلاح' : 'e.g. Mohamed Salah'}
                       className="w-full glass-input pl-10 pr-3.5 py-2.5 rounded-xl text-sm"
                     />
                   </div>
