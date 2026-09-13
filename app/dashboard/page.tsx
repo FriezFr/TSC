@@ -14,10 +14,13 @@ import {
   BookOpen,
   Trash2,
   Check,
+  Sparkles,
 } from 'lucide-react';
 import Link from 'next/link';
+import ScheduleImportModal from '@/components/ScheduleImporter/ScheduleImportModal';
 
 export default function TodayViewPage() {
+  const [isImporterOpen, setIsImporterOpen] = useState(false);
   const {
     profile,
     timetable,
@@ -148,12 +151,22 @@ export default function TodayViewPage() {
             </p>
           </div>
 
-          <button
-            onClick={() => setIsTimetableModalOpen(true)}
-            className="px-4 py-2 rounded-xl glass-button-primary text-xs font-bold self-start sm:self-center cursor-pointer"
-          >
-            {t('addClass')}
-          </button>
+          <div className="flex items-center gap-2 self-start sm:self-center">
+            <button
+              onClick={() => setIsImporterOpen(true)}
+              className="px-3.5 py-2 rounded-xl bg-white text-black hover:bg-neutral-200 text-xs font-bold flex items-center justify-center gap-1.5 cursor-pointer shadow-sm shadow-white/20 transition-all"
+            >
+              <Sparkles className="w-3.5 h-3.5 text-blue-600" />
+              <span>{language === 'ar' ? 'استيراد الجدول' : 'Import Schedule'}</span>
+            </button>
+
+            <button
+              onClick={() => setIsTimetableModalOpen(true)}
+              className="px-4 py-2 rounded-xl glass-button-primary text-xs font-bold cursor-pointer"
+            >
+              {t('addClass')}
+            </button>
+          </div>
         </div>
       </GlassCard>
 
@@ -458,6 +471,12 @@ export default function TodayViewPage() {
           </div>
         </form>
       </GlassModal>
+
+      {/* AI Schedule Import Modal */}
+      <ScheduleImportModal
+        isOpen={isImporterOpen}
+        onClose={() => setIsImporterOpen(false)}
+      />
     </div>
   );
 }

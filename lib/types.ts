@@ -25,6 +25,10 @@ export interface TimetableSlot {
   start_time: string; // "08:00"
   end_time: string; // "09:30"
   room_or_teacher?: string;
+  notes?: string;
+  import_id?: string;
+  recurrence?: 'weekly' | 'daily' | 'none';
+  is_recurring?: boolean;
 }
 
 export interface Assignment {
@@ -35,7 +39,51 @@ export interface Assignment {
   due_date: string; // YYYY-MM-DD
   priority: Priority;
   is_completed: boolean;
+  notes?: string;
+  start_time?: string;
+  end_time?: string;
+  recurrence?: 'weekly' | 'daily' | 'custom' | 'none';
+  recurrence_days?: number[];
+  dependency?: string;
+  deadline_rule?: string;
+  import_id?: string;
+  source_id?: string;
   created_at?: string;
+}
+
+export interface ParsedLessonSlot {
+  id?: string;
+  subject: string;
+  days: string[]; // e.g. ["Sunday", "Tuesday", "Thursday"]
+  dayIndices: number[]; // 0: Sat, 1: Sun, 2: Mon, 3: Tue, 4: Wed, 5: Thu, 6: Fri
+  startTime: string; // "18:00" or ""
+  endTime: string; // "19:30" or ""
+  roomOrTeacher?: string; // "Mom", "Private Lesson", etc.
+  notes?: string;
+  isRecurring: boolean;
+  importId: string;
+}
+
+export interface ParsedScheduleTask {
+  id?: string;
+  title: string;
+  subject: string;
+  type: 'homework' | 'revision' | 'task';
+  recurrence: 'weekly' | 'daily' | 'none';
+  recurrenceDays: string[];
+  deadlineRule?: string; // e.g. "before_next_science_lesson"
+  calculatedDueDate: string; // YYYY-MM-DD
+  priority: Priority;
+  notes?: string;
+  dependency?: string; // e.g. "After Science Lesson"
+  importId: string;
+}
+
+export interface ParsedScheduleResponse {
+  summary: string;
+  clarifications: string[];
+  lessons: ParsedLessonSlot[];
+  tasks: ParsedScheduleTask[];
 }
 
 export interface Exam {

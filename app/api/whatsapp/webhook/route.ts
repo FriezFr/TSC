@@ -125,13 +125,27 @@ export async function POST(req: NextRequest) {
   }
 }
 
+// Clean markdown for WhatsApp (convert ** to *, headings to bold, bullets to •)
+function formatForWhatsApp(text: string): string {
+  if (!text) return '';
+  return text
+    // Replace markdown headers (# Header, ## Header) with *Header*
+    .replace(/^#{1,4}\s+(.+)$/gm, '*$1*')
+    // Convert double asterisks **bold** to single asterisk *bold* (WhatsApp native bold)
+    .replace(/\*\*([^*]+)\*\*/g, '*$1*')
+    // Replace - item with • item
+    .replace(/^-\s+/gm, '• ')
+    .trim();
+}
+
 // Send message back using Meta WhatsApp Cloud API
 async function sendWhatsAppReply(to: string, text: string) {
   const accessToken = process.env.WHATSAPP_ACCESS_TOKEN;
   const phoneNumberId = process.env.WHATSAPP_PHONE_NUMBER_ID;
+  const formattedText = formatForWhatsApp(text);
 
   if (!accessToken || !phoneNumberId) {
-    console.log(`[WhatsApp Mock Reply to ${to}]: ${text}`);
+    console.log(`[WhatsApp Mock Reply to ${to}]: ${formattedText}`);
     return;
   }
 
@@ -146,7 +160,7 @@ async function sendWhatsAppReply(to: string, text: string) {
         messaging_product: 'whatsapp',
         to,
         type: 'text',
-        text: { body: text },
+        text: { body: formattedText },
       }),
     });
   } catch (err) {

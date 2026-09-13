@@ -14,6 +14,8 @@ import {
   TimetableSlot,
   UserProfile,
   ChatMessage,
+  ParsedLessonSlot,
+  ParsedScheduleTask,
 } from './types';
 import { getSupabaseClient } from './supabase/client';
 import { Language, Translations, translations } from './i18n';
@@ -31,12 +33,19 @@ interface AppContextType {
   // Timetable
   timetable: TimetableSlot[];
   addTimetableSlot: (slot: Omit<TimetableSlot, 'id'>) => Promise<void>;
+  updateTimetableSlot: (id: string, slot: Partial<TimetableSlot>) => Promise<void>;
   deleteTimetableSlot: (id: string) => Promise<void>;
   // Assignments
   assignments: Assignment[];
   addAssignment: (item: Omit<Assignment, 'id' | 'is_completed'>) => Promise<void>;
+  updateAssignment: (id: string, item: Partial<Assignment>) => Promise<void>;
   toggleAssignment: (id: string) => Promise<void>;
   deleteAssignment: (id: string) => Promise<void>;
+  // Smart Schedule Importer
+  importScheduleData: (
+    lessons: ParsedLessonSlot[],
+    tasks: ParsedScheduleTask[]
+  ) => Promise<{ importedLessons: number; importedTasks: number; updatedCount: number }>;
   // Exams
   exams: Exam[];
   addExam: (item: Omit<Exam, 'id'>) => Promise<void>;
@@ -353,6 +362,22 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
+  const updateTimetableSlot = async (id: string, slot: Partial<TimetableSlot>) => {
+    setTimetable((prev) =>
+      prev.map((s) => (s.id === id ? { ...s, ...slot } : s))
+    );
+    const supabase = getSupabaseClient();
+    if (supabase && user) {
+      const updateData: any = {};
+      if (slot.day_of_week !== undefined) updateData.day_of_week = slot.day_of_week;
+      if (slot.subject !== undefined) updateData.subject = slot.subject;
+      if (slot.start_time !== undefined) updateData.start_time = slot.start_time;
+      if (slot.end_time !== undefined) updateData.end_time = slot.end_time;
+      if (slot.room_or_teacher !== undefined) updateData.room_or_teacher = slot.room_or_teacher;
+      await supabase.from('timetable').update(updateData).eq('id', id);
+    }
+  };
+
   const deleteTimetableSlot = async (id: string) => {
     setTimetable((prev) => prev.filter((s) => s.id !== id));
     const supabase = getSupabaseClient();
@@ -369,22 +394,41 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         .from('assignments')
         .insert([
           {
-            ...item,
+            title: item.title,
+            subject: item.subject,
+            due_date: item.due_date,
+            priority: item.priority,
             user_id: user.id,
             is_completed: false,
           },
         ])
         .select('*')
         .single();
-      if (data) setAssignments((prev) => [data, ...prev]);
+      if (data) setAssignments((prev) => [{ ...item, ...data }, ...prev]);
     } else {
-      const fallback = {
+      const fallback: Assignment = {
         ...item,
         id: `as-${Date.now()}`,
         is_completed: false,
         created_at: new Date().toISOString(),
       };
       setAssignments((prev) => [fallback, ...prev]);
+    }
+  };
+
+  const updateAssignment = async (id: string, item: Partial<Assignment>) => {
+    setAssignments((prev) =>
+      prev.map((a) => (a.id === id ? { ...a, ...item } : a))
+    );
+    const supabase = getSupabaseClient();
+    if (supabase && user) {
+      const updateData: any = {};
+      if (item.title !== undefined) updateData.title = item.title;
+      if (item.subject !== undefined) updateData.subject = item.subject;
+      if (item.due_date !== undefined) updateData.due_date = item.due_date;
+      if (item.priority !== undefined) updateData.priority = item.priority;
+      if (item.is_completed !== undefined) updateData.is_completed = item.is_completed;
+      await supabase.from('assignments').update(updateData).eq('id', id);
     }
   };
 
@@ -409,6 +453,203 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     if (supabase && user) {
       await supabase.from('assignments').delete().eq('id', id);
     }
+  };
+
+  // Smart Schedule Importer
+  const importScheduleData = async (
+    lessons: ParsedLessonSlot[],
+    tasks: ParsedScheduleTask[]
+  ) => {
+    const supabase = getSupabaseClient();
+    let importedLessons = 0;
+    let importedTasks = 0;
+    let updatedCount = 0;
+
+    // 1. Timetable Slots
+    const updatedTimetable = [...timetable];
+    for (const lesson of lessons) {
+      const days = lesson.dayIndices && lesson.dayIndices.length > 0 ? lesson.dayIndices : [0];
+      for (const day of days) {
+        const existingIdx = updatedTimetable.findIndex(
+          (s) =>
+            (s.import_id && s.import_id === lesson.importId && s.day_of_week === day) ||
+            (s.subject.toLowerCase().trim() === lesson.subject.toLowerCase().trim() && s.day_of_week === day)
+        );
+
+        const startTime = lesson.startTime || '08:00';
+        const endTime = lesson.endTime || '09:30';
+
+        if (existingIdx >= 0) {
+          const existingSlot = updatedTimetable[existingIdx];
+          const updatedSlot: TimetableSlot = {
+            ...existingSlot,
+            start_time: startTime,
+            end_time: endTime,
+            room_or_teacher: lesson.roomOrTeacher || existingSlot.room_or_teacher,
+            notes: lesson.notes || existingSlot.notes,
+            import_id: lesson.importId,
+            is_recurring: lesson.isRecurring,
+          };
+          updatedTimetable[existingIdx] = updatedSlot;
+          updatedCount++;
+
+          if (supabase && user) {
+            await supabase
+              .from('timetable')
+              .update({
+                start_time: startTime,
+                end_time: endTime,
+                room_or_teacher: lesson.roomOrTeacher || null,
+              })
+              .eq('id', existingSlot.id);
+          }
+        } else {
+          const slotPayload: TimetableSlot = {
+            id: `tt-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+            day_of_week: day,
+            subject: lesson.subject,
+            start_time: startTime,
+            end_time: endTime,
+            room_or_teacher: lesson.roomOrTeacher || undefined,
+            notes: lesson.notes,
+            import_id: lesson.importId,
+            is_recurring: lesson.isRecurring,
+          };
+
+          if (supabase && user) {
+            const { data } = await supabase
+              .from('timetable')
+              .insert([
+                {
+                  user_id: user.id,
+                  day_of_week: day,
+                  subject: lesson.subject,
+                  start_time: startTime,
+                  end_time: endTime,
+                  room_or_teacher: lesson.roomOrTeacher || null,
+                },
+              ])
+              .select('*')
+              .maybeSingle();
+
+            if (data) {
+              updatedTimetable.push({ ...data, ...slotPayload });
+            } else {
+              updatedTimetable.push(slotPayload);
+            }
+          } else {
+            updatedTimetable.push(slotPayload);
+          }
+          importedLessons++;
+        }
+      }
+    }
+    setTimetable(updatedTimetable);
+
+    // 2. Also populate Planner Study Blocks in localStorage for /dashboard/planner
+    try {
+      const currentBlocksSaved = localStorage.getItem('baccalaureate_study_blocks_user') || localStorage.getItem('thanaweya_study_blocks_user');
+      let currentBlocks: any[] = [];
+      if (currentBlocksSaved) {
+        currentBlocks = JSON.parse(currentBlocksSaved);
+      }
+      for (const lesson of lessons) {
+        for (const day of (lesson.dayIndices || [0])) {
+          const exists = currentBlocks.find(
+            (b) => b.dayIndex === day && b.subject.toLowerCase() === lesson.subject.toLowerCase()
+          );
+          if (!exists) {
+            currentBlocks.push({
+              id: `sb-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+              dayIndex: day,
+              subject: lesson.subject,
+              hours: 2,
+              timeSlot: lesson.startTime && lesson.endTime ? `${lesson.startTime} - ${lesson.endTime}` : 'Flexible Slot',
+              notes: lesson.notes || 'Auto-imported from study schedule',
+            });
+          }
+        }
+      }
+      localStorage.setItem('baccalaureate_study_blocks_user', JSON.stringify(currentBlocks));
+    } catch {}
+
+    // 3. Assignments & Tasks
+    const updatedAssignments = [...assignments];
+    for (const task of tasks) {
+      const existingIdx = updatedAssignments.findIndex(
+        (a) =>
+          (a.import_id && a.import_id === task.importId) ||
+          (a.title.toLowerCase().trim() === task.title.toLowerCase().trim() && a.subject.toLowerCase().trim() === task.subject.toLowerCase().trim())
+      );
+
+      if (existingIdx >= 0) {
+        const existingA = updatedAssignments[existingIdx];
+        const updatedA: Assignment = {
+          ...existingA,
+          due_date: task.calculatedDueDate || existingA.due_date,
+          priority: task.priority || existingA.priority,
+          notes: task.notes || existingA.notes,
+          import_id: task.importId,
+          deadline_rule: task.deadlineRule,
+          dependency: task.dependency,
+        };
+        updatedAssignments[existingIdx] = updatedA;
+        updatedCount++;
+
+        if (supabase && user) {
+          await supabase
+            .from('assignments')
+            .update({
+              due_date: task.calculatedDueDate || existingA.due_date,
+              priority: task.priority || existingA.priority,
+            })
+            .eq('id', existingA.id);
+        }
+      } else {
+        const newAssignment: Assignment = {
+          id: `as-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+          title: task.title,
+          subject: task.subject,
+          due_date: task.calculatedDueDate,
+          priority: task.priority,
+          is_completed: false,
+          notes: task.notes,
+          import_id: task.importId,
+          deadline_rule: task.deadlineRule,
+          dependency: task.dependency,
+          created_at: new Date().toISOString(),
+        };
+
+        if (supabase && user) {
+          const { data } = await supabase
+            .from('assignments')
+            .insert([
+              {
+                user_id: user.id,
+                title: task.title,
+                subject: task.subject,
+                due_date: task.calculatedDueDate,
+                priority: task.priority,
+                is_completed: false,
+              },
+            ])
+            .select('*')
+            .maybeSingle();
+
+          if (data) {
+            updatedAssignments.unshift({ ...data, ...newAssignment });
+          } else {
+            updatedAssignments.unshift(newAssignment);
+          }
+        } else {
+          updatedAssignments.unshift(newAssignment);
+        }
+        importedTasks++;
+      }
+    }
+    setAssignments(updatedAssignments);
+
+    return { importedLessons, importedTasks, updatedCount };
   };
 
   // Exams
@@ -742,11 +983,14 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         t,
         timetable,
         addTimetableSlot,
+        updateTimetableSlot,
         deleteTimetableSlot,
         assignments,
         addAssignment,
+        updateAssignment,
         toggleAssignment,
         deleteAssignment,
+        importScheduleData,
         exams,
         addExam,
         deleteExam,

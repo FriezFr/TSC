@@ -41,9 +41,11 @@ DIRECTIVES:
    (Only include this tag if an actionable task or score was mentioned. Never include it for general conversation or document explanation).
 
 4. CLEAN, BEAUTIFUL CHAT (STRICT FORMATTING):
+   - NEVER use markdown headings (#, ##, ###). Write headers as natural text with bullet points or clean bolding.
    - NEVER use LaTeX math dollar signs ($ or $$). Write all math, equations, numbers, and formulas in clear, natural text (e.g. "1 + 1 = 2" or "V = I × R" or "E = mc²").
    - NEVER put asterisks around numbers or single punctuation (do not write **2** or **=**).
-   - Write cleanly, naturally, and concisely so the response is fast and readable on both Telegram and the web.
+   - NEVER output markdown code blocks unless the student explicitly asks for code or programming.
+   - Keep answers cleanly formatted, friendly, and readable directly in WhatsApp, Telegram, and mobile web.
 `;
 
 export async function processUserMessageWithAI(options: {

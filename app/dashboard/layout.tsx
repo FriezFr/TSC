@@ -1,20 +1,22 @@
 'use client';
 
-import React, { useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import Sidebar from '@/components/Navigation/Sidebar';
 import MobileTabBar from '@/components/Navigation/MobileTabBar';
 import { useApp } from '@/lib/context';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { LogOut, Bot, Send } from 'lucide-react';
+import { LogOut, Bot, Send, Sparkles } from 'lucide-react';
+import ScheduleImportModal from '@/components/ScheduleImporter/ScheduleImportModal';
 
 export default function DashboardLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
-  const { user, authLoading, profile, signOut } = useApp();
+  const { user, authLoading, profile, signOut, language } = useApp();
   const router = useRouter();
+  const [isImporterOpen, setIsImporterOpen] = useState(false);
 
   useEffect(() => {
     if (!authLoading && !user) {
@@ -59,6 +61,16 @@ export default function DashboardLayout({
           </div>
 
           <div className="flex items-center gap-2">
+            {/* Import Schedule AI Button */}
+            <button
+              onClick={() => setIsImporterOpen(true)}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold bg-white text-black hover:bg-neutral-200 transition-all cursor-pointer shadow-sm shadow-white/20"
+              title="Auto-import your study schedule with AI"
+            >
+              <Sparkles className="w-3.5 h-3.5 text-blue-600" />
+              <span>{language === 'ar' ? 'استيراد الجدول' : 'Import Schedule'}</span>
+            </button>
+
             {/* Direct AI Chat Shortcut */}
             <Link
               href="/dashboard/chat"
@@ -106,6 +118,12 @@ export default function DashboardLayout({
         <span className="hidden sm:inline">AI Tutor</span>
         <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
       </Link>
+
+      {/* Schedule Import Modal */}
+      <ScheduleImportModal
+        isOpen={isImporterOpen}
+        onClose={() => setIsImporterOpen(false)}
+      />
 
       {/* Mobile Floating Bottom Bar */}
       <MobileTabBar />

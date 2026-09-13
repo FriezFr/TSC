@@ -5,12 +5,14 @@ import { useApp } from '@/lib/context';
 import { GlassCard } from '@/components/ui/GlassCard';
 import { GlassModal } from '@/components/ui/GlassModal';
 import { Priority, THANAWEYA_SUBJECTS } from '@/lib/types';
-import { CheckSquare, Plus, Trash2, Calendar, Check, Filter } from 'lucide-react';
+import { CheckSquare, Plus, Trash2, Calendar, Check, Filter, Sparkles } from 'lucide-react';
+import ScheduleImportModal from '@/components/ScheduleImporter/ScheduleImportModal';
 
 export default function AssignmentsPage() {
   const { assignments, addAssignment, toggleAssignment, deleteAssignment } = useApp();
 
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [isImporterOpen, setIsImporterOpen] = useState(false);
   const [filterSubject, setFilterSubject] = useState<string>('all');
   const [filterStatus, setFilterStatus] = useState<'all' | 'pending' | 'completed'>('all');
 
@@ -61,13 +63,23 @@ export default function AssignmentsPage() {
           </p>
         </div>
 
-        <button
-          onClick={() => setIsModalOpen(true)}
-          className="px-4 py-2.5 rounded-xl glass-button-primary text-xs font-bold flex items-center justify-center gap-1.5 cursor-pointer"
-        >
-          <Plus className="w-4 h-4" />
-          <span>New Assignment</span>
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => setIsImporterOpen(true)}
+            className="px-3.5 py-2.5 rounded-xl bg-white text-black hover:bg-neutral-200 text-xs font-bold flex items-center justify-center gap-1.5 cursor-pointer shadow-sm shadow-white/20 transition-all"
+          >
+            <Sparkles className="w-4 h-4 text-blue-600" />
+            <span>Import Schedule</span>
+          </button>
+
+          <button
+            onClick={() => setIsModalOpen(true)}
+            className="px-4 py-2.5 rounded-xl glass-button-primary text-xs font-bold flex items-center justify-center gap-1.5 cursor-pointer"
+          >
+            <Plus className="w-4 h-4" />
+            <span>New Assignment</span>
+          </button>
+        </div>
       </div>
 
       {/* Filter Row */}
@@ -267,6 +279,12 @@ export default function AssignmentsPage() {
           </div>
         </form>
       </GlassModal>
+
+      {/* AI Schedule Import Modal */}
+      <ScheduleImportModal
+        isOpen={isImporterOpen}
+        onClose={() => setIsImporterOpen(false)}
+      />
     </div>
   );
 }

@@ -3,8 +3,9 @@
 import React, { useState } from 'react';
 import { GlassCard } from '@/components/ui/GlassCard';
 import { GlassModal } from '@/components/ui/GlassModal';
-import { Layers, Plus, Trash2, Clock } from 'lucide-react';
+import { Layers, Plus, Trash2, Clock, Sparkles } from 'lucide-react';
 import { THANAWEYA_SUBJECTS } from '@/lib/types';
+import ScheduleImportModal from '@/components/ScheduleImporter/ScheduleImportModal';
 
 interface StudyBlock {
   id: string;
@@ -29,11 +30,23 @@ export default function StudyPlannerPage() {
   });
 
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [isImporterOpen, setIsImporterOpen] = useState(false);
   const [selectedDay, setSelectedDay] = useState(0);
   const [newSubject, setNewSubject] = useState('Physics');
   const [newHours, setNewHours] = useState('2');
   const [newSlot, setNewSlot] = useState('');
   const [newNotes, setNewNotes] = useState('');
+
+  const reloadBlocks = () => {
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem('baccalaureate_study_blocks_user') || localStorage.getItem('thanaweya_study_blocks_user');
+      if (saved) {
+        try {
+          setBlocks(JSON.parse(saved));
+        } catch {}
+      }
+    }
+  };
 
   const saveBlocks = (newB: StudyBlock[]) => {
     setBlocks(newB);
@@ -90,13 +103,23 @@ export default function StudyPlannerPage() {
           </p>
         </div>
 
-        <button
-          onClick={() => setIsModalOpen(true)}
-          className="px-4 py-2.5 rounded-xl glass-button-primary text-xs font-bold flex items-center justify-center gap-1.5 cursor-pointer"
-        >
-          <Plus className="w-4 h-4" />
-          <span>Add Study Slot</span>
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => setIsImporterOpen(true)}
+            className="px-3.5 py-2.5 rounded-xl bg-white text-black hover:bg-neutral-200 text-xs font-bold flex items-center justify-center gap-1.5 cursor-pointer shadow-sm shadow-white/20 transition-all"
+          >
+            <Sparkles className="w-4 h-4 text-blue-600" />
+            <span>Import Schedule</span>
+          </button>
+
+          <button
+            onClick={() => setIsModalOpen(true)}
+            className="px-4 py-2.5 rounded-xl glass-button-primary text-xs font-bold flex items-center justify-center gap-1.5 cursor-pointer"
+          >
+            <Plus className="w-4 h-4" />
+            <span>Add Study Slot</span>
+          </button>
+        </div>
       </div>
 
       {/* Summary */}
@@ -269,6 +292,13 @@ export default function StudyPlannerPage() {
           </div>
         </form>
       </GlassModal>
+
+      {/* AI Schedule Import Modal */}
+      <ScheduleImportModal
+        isOpen={isImporterOpen}
+        onClose={() => setIsImporterOpen(false)}
+        onSuccess={reloadBlocks}
+      />
     </div>
   );
 }

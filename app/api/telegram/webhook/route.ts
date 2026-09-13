@@ -70,14 +70,24 @@ async function sendChatAction(chatId: number, action: 'typing' | 'upload_documen
   }
 }
 
+// Clean markdown headers for Telegram plain text display
+function formatForTelegram(text: string): string {
+  if (!text) return '';
+  return text
+    // Replace markdown headers with clean bullet/bold lines
+    .replace(/^#{1,4}\s+(.+)$/gm, '• $1')
+    .trim();
+}
+
 // Send reply with automatic chunking for Telegram's 4096 character limit
-async function sendTelegramReply(chatId: number, text: string) {
+async function sendTelegramReply(chatId: number, rawText: string) {
   const token = process.env.TELEGRAM_BOT_TOKEN;
   if (!token) {
     console.error('TELEGRAM_BOT_TOKEN is not configured');
     return;
   }
 
+  const text = formatForTelegram(rawText);
   const maxChunk = 4000;
   for (let i = 0; i < text.length; i += maxChunk) {
     const chunk = text.slice(i, i + maxChunk);
