@@ -215,7 +215,7 @@ export async function POST(req: NextRequest) {
         if (linkErr || !linkRecord) {
           await sendTelegramReply(
             chatId,
-            '❌ Invalid or expired sync code.\n\nPlease generate a new 6-character code in your Baccalaureate Dashboard Settings page (https://tsctasker.vercel.app/dashboard/settings).'
+            '❌ Invalid or expired sync code.\n\nPlease generate a new 6-character code in your TaskerBot Settings page (https://taskerbot.vercel.app/dashboard/settings).'
           );
           return NextResponse.json({ ok: true });
         }
@@ -234,6 +234,7 @@ export async function POST(req: NextRequest) {
           chatId,
           'حبيبي يا إسماعيل يا بطل! أنا TaskerBot / TSC AI معاك ومصحصحلك جداً أهو. 👋\n\n' +
             'قولي بقى يا بشمهندس، أخبار المذاكرة والتحضير إيه؟ بما إننا في مسار الهندسة والحاسبات وهدفنا الـ 99% إن شاء الله، فإحنا هدفنا فوق وحلمك قريب جداً، بس محتاجين نلعبها صح ونكون دايماً سابقين بأقوى أداء! 🎯🚀\n\n' +
+            'You can also talk to me in English or Arabic anytime!\n' +
             'تحب نعمل إيه النهاردة؟\n' +
             '- تشرحلي حاجة واقفة معاك في الرياضة أو الفيزياء أو الحاسب ونظبطها؟\n' +
             '- تبعتلي صورة سؤال أو مسألة رمة نحلها سوا خطوة بخطوة؟\n' +
@@ -247,9 +248,9 @@ export async function POST(req: NextRequest) {
       // Unlinked greeting
       await sendTelegramReply(
         chatId,
-        '👋 Welcome to the Egyptian Baccalaureate AI Assistant!\n\n' +
+        '👋 Welcome to TaskerBot / TSC AI Assistant!\n\n' +
           'To connect your account:\n' +
-          '1. Open your Dashboard: https://tsctasker.vercel.app\n' +
+          '1. Open your Dashboard: https://taskerbot.vercel.app\n' +
           '2. Go to Settings -> Telegram Bot\n' +
           '3. Click "Generate Code"\n' +
           '4. Send `/start YOUR_CODE` here to link your account!'
@@ -451,9 +452,16 @@ export async function POST(req: NextRequest) {
     const scheduleContext = `Scheduled Classes: ${timetableSlots.map((s: any) => `Day ${s.day_of_week}: ${s.subject} (${s.start_time}-${s.end_time})`).join(', ') || 'No classes registered yet'}\nPending Homework: ${pendingTasks.map((t: any) => `${t.title} (${t.subject}, Due: ${t.due_date})`).join(', ') || 'None'}`;
     const recentNotes = recentNotesRes.data?.map((n: any) => n.content).join('\n---\n');
 
+    const explicitEnglish = 
+      /^\/?(en|english)\b/i.test(rawText) ||
+      /\b(speak|talk|reply|switch to|switch)\s+(in\s+)?english\b/i.test(rawText);
+    const hasArabic = /[\u0600-\u06FF]/.test(rawText);
+    const isEnglish = explicitEnglish || (!hasArabic && /[a-zA-Z]{3,}/.test(rawText));
+
     // Process text with AI
     const aiResponse = await processUserMessageWithAI({
       text: rawText,
+      languagePreference: isEnglish ? 'en' : 'ar',
       userProfile: profile,
       scheduleContext,
       recentMessages: recentHistory,

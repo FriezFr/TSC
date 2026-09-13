@@ -84,7 +84,7 @@ export async function POST(req: NextRequest) {
         if (!linkRecord) {
           await sendWhatsAppReply(
             fromNumber,
-            '❌ كود الربط غير صحيح أو منتهي الصلاحية.\n\nمن فضلك افتح إعدادات TTASKER واضغط "توليد رمز" جديد:\nhttps://tsctasker.vercel.app/dashboard/settings'
+            '❌ كود الربط غير صحيح أو منتهي الصلاحية.\nInvalid or expired link code.\n\nمن فضلك افتح إعدادات TaskerBot واضغط "توليد رمز" جديد:\nPlease open Settings and generate a new code:\nhttps://taskerbot.vercel.app/dashboard/settings'
           );
           return NextResponse.json({ ok: true });
         }
@@ -102,9 +102,10 @@ export async function POST(req: NextRequest) {
         await sendWhatsAppReply(
           fromNumber,
           'حبيبي يا إسماعيل يا بطل! أنا TaskerBot / TSC AI معاك ومصحصحلك جداً أهو. 👋\n\n' +
-            'تم ربط رقم الواتساب بحسابك في TTASKER بنجاح يا بشمهندس!\n' +
+            'تم ربط رقم الواتساب بحسابك في TaskerBot بنجاح يا بشمهندس! Your WhatsApp is now linked to TaskerBot!\n' +
             'بما إننا في مسار الهندسة والحاسبات وهدفنا الـ 99% إن شاء الله، فإحنا هدفنا فوق وحلمك قريب جداً، بس محتاجين نلعبها صح ونكون دايماً سابقين بأقوى أداء! 🎯🚀\n\n' +
-            'تقدر تبعتلي أو تحول رسايل جروبات المدرسة، تسألني عن مواعيد الحصص والواجبات، أو تبعتلي أي مسألة نحلها سوا.\n' +
+            'تقدر تتكلم معايا بالعربي أو بالإنجليزية (You can talk to me in English or Arabic anytime!).\n' +
+            'ابعتلي مواعيد الحصص والواجبات، أو أي سؤال نحله سوا.\n' +
             'سماعتي معاك يا حطاب، قول لي حابب نبدأ بإيه! 😎'
         );
         return NextResponse.json({ ok: true });
@@ -113,11 +114,12 @@ export async function POST(req: NextRequest) {
       // Prompt to link
       await sendWhatsAppReply(
         fromNumber,
-        '👋 مرحباً بك في مساعد TTASKER الذكي للبكالوريا المصرية!\n\n' +
-          'لربط رقمك بحسابك في الموقع:\n' +
-          '1. افتح الإعدادات: https://tsctasker.vercel.app/dashboard/settings\n' +
-          '2. اضغط "توليد رمز" (Generate Code)\n' +
-          '3. أرسل الرمز المكون من 6 حروف هنا لربط الحساب فوراً!'
+        '👋 Welcome to TaskerBot / TSC AI — Your Smart School Assistant!\n' +
+          'مرحباً بك في TaskerBot / TSC AI المساعد المدرسي الذكي!\n\n' +
+          'To link your WhatsApp number to your account (لربط حسابك):\n' +
+          '1. Open Settings (افتح الإعدادات): https://taskerbot.vercel.app/dashboard/settings\n' +
+          '2. Tap "Generate Code" (اضغط توليد رمز)\n' +
+          '3. Send the 6-character code here to connect instantly!'
       );
       return NextResponse.json({ ok: true });
     }
@@ -163,9 +165,16 @@ export async function POST(req: NextRequest) {
     const scheduleContext = `Scheduled Classes: ${timetableSlots.map((s: any) => `Day ${s.day_of_week}: ${s.subject} (${s.start_time}-${s.end_time})`).join(', ') || 'None'}\nPending Homework: ${pendingTasks.map((t: any) => `${t.title} (${t.subject}, Due: ${t.due_date})`).join(', ') || 'None'}`;
     const recentNotes = recentNotesRes.data?.map((n: any) => n.content).join('\n---\n');
 
+    const explicitEnglish = 
+      /^\/?(en|english)\b/i.test(incomingText) ||
+      /\b(speak|talk|reply|switch to|switch)\s+(in\s+)?english\b/i.test(incomingText);
+    const hasArabic = /[\u0600-\u06FF]/.test(incomingText);
+    const isEnglish = explicitEnglish || (!hasArabic && /[a-zA-Z]{3,}/.test(incomingText));
+
     // 5. Process with Gemini
     const aiResponse = await processUserMessageWithAI({
       text: incomingText,
+      languagePreference: isEnglish ? 'en' : 'ar',
       userProfile: profile,
       scheduleContext,
       recentMessages: recentHistory,
@@ -175,7 +184,7 @@ export async function POST(req: NextRequest) {
     // 6. Execute Dashboard Action if actionable and confidence >= 0.70
     let actionFeedback = '';
     if (aiResponse.action && (aiResponse.confidence ?? 1.0) >= 0.7) {
-      actionFeedback = await executeWhatsAppAction(supabase, userId, aiResponse.action);
+      actionFeedback = await executeWhatsAppAction(supabase, userId, aiResponse.action, isEnglish);
     }
 
     let finalReply = aiResponse.reply;
@@ -202,7 +211,7 @@ export async function POST(req: NextRequest) {
   }
 }
 
-async function executeWhatsAppAction(supabase: any, userId: string, action: any): Promise<string> {
+async function executeWhatsAppAction(supabase: any, userId: string, action: any, isEnglish: boolean = false): Promise<string> {
   if (!action || !action.type) return '';
 
   try {
@@ -245,7 +254,9 @@ async function executeWhatsAppAction(supabase: any, userId: string, action: any)
           previous_state: targetSlot,
         });
 
-        return `🔄 تم تعديل موعد حصة ${subject} في جدولك!`;
+        return isEnglish
+          ? `🔄 Rescheduled ${subject} class in your timetable!`
+          : `🔄 تم تعديل موعد حصة ${subject} في جدولك!`;
       } else {
         const { data: newSlot } = await supabase
           .from('timetable')
@@ -270,7 +281,9 @@ async function executeWhatsAppAction(supabase: any, userId: string, action: any)
           previous_state: null,
         });
 
-        return `✓ تم إضافة حصة ${subject} لجدولك!`;
+        return isEnglish
+          ? `✓ Added ${subject} class to your timetable!`
+          : `✓ تم إضافة حصة ${subject} لجدولك!`;
       }
     }
 
@@ -298,7 +311,9 @@ async function executeWhatsAppAction(supabase: any, userId: string, action: any)
           previous_state: targetSlot,
         });
 
-        return `✓ تم تسجيل إلغاء حصة ${subject} وحذفها من الجدول.`;
+        return isEnglish
+          ? `✓ Cancelled ${subject} lesson and removed it from your timetable.`
+          : `✓ تم تسجيل إلغاء حصة ${subject} وحذفها من الجدول.`;
       }
       return '';
     }
@@ -323,7 +338,9 @@ async function executeWhatsAppAction(supabase: any, userId: string, action: any)
           .update({ due_date: dueDate })
           .eq('id', existingA.id);
 
-        return `🔄 تم تحديث موعد تسليم ${title} إلى ${dueDate}.`;
+        return isEnglish
+          ? `🔄 Updated ${title} due date to ${dueDate}.`
+          : `🔄 تم تحديث موعد تسليم ${title} إلى ${dueDate}.`;
       }
 
       const { data: newAssignment } = await supabase
@@ -350,7 +367,9 @@ async function executeWhatsAppAction(supabase: any, userId: string, action: any)
         previous_state: null,
       });
 
-      return `✓ تم تسجيل الواجب في جدولك (تسليم: ${dueDate}).`;
+      return isEnglish
+        ? `✓ Added homework to your schedule (Due: ${dueDate}).`
+        : `✓ تم تسجيل الواجب في جدولك (تسليم: ${dueDate}).`;
     }
 
     // D. EXAM
@@ -380,7 +399,9 @@ async function executeWhatsAppAction(supabase: any, userId: string, action: any)
         previous_state: null,
       });
 
-      return `📅 تم تسجيل امتحان ${subject} يوم ${examDate}.`;
+      return isEnglish
+        ? `📅 Scheduled ${subject} exam on ${examDate}.`
+        : `📅 تم تسجيل امتحان ${subject} يوم ${examDate}.`;
     }
   } catch (err) {
     console.error('Error executing WhatsApp action:', err);
