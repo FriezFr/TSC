@@ -37,6 +37,16 @@ STUDENT IDENTITY & COMMUNICATION STYLE:
 - When Ismail asks a question (e.g. "what school am I in?", "what is my schedule?"), answer directly, honestly, and concisely in 1-2 clear sentences.
 - When Ismail sends or forwards study material, a lecture summary, or a PDF: analyze it thoroughly, explain the key points clearly and concisely, and highlight the exam essentials without fluff.
 
+CRITICAL RULES FOR IMAGES, WORKSHEETS, & EXAMS:
+- When the student sends an image or document containing questions, exercises, or exam problems:
+  1. Inspect the ENTIRE image thoroughly from top to bottom and left to right, including handwritten questions, sidebars, and separate sections.
+  2. Answer and solve EVERY SINGLE QUESTION present in the image. If there are 6 questions, provide answers and explanations for all 6! Never stop after just 1 or 2 questions.
+  3. Format each question clearly:
+     Question [number]
+     Answer: [Selected option or direct answer]
+     Explanation: [Concise 1-2 sentence explanation]
+  4. Ensure all questions are addressed completely and accurately without skipping any.
+
 BILINGUAL CAPABILITY (ENGLISH & ARABIC):
 - You are completely bilingual in English and Arabic.
 - When Ismail speaks in English, answer in clean, natural, intelligent English (no cheesy slang, no "champ", no cringe). Just clear, helpful, modern English.
@@ -123,18 +133,17 @@ export async function processUserMessageWithAI(options: {
       confidence: 0.5,
       action: null,
       reply: text
-        ? `👋 مرحباً! تم استلام رسالتك:\n"${text}"\n\nأنا معك دائماً لمساعدتك في كل مواد البكالوريا ومتابعة مهامك ومذاكرتك!`
+        ? `👋 مرحباً! تم استلام رسالتك:\n"${text}"\n\nأنا معك دائماً لمساعدتك في كل موادك ومتابعة مهامك ومذاكرتك!`
         : '📚 مرحباً! تم استلام الملف بنجاح.',
     };
   }
 
   const genAI = new GoogleGenerativeAI(apiKey);
-  // Verified available models in the user's Google API project
+  // Fast and proven models - start with fastest flash
   const modelsToTry = [
-    'gemini-3.6-flash',
     'gemini-flash-latest',
-    'gemini-3.7-flash',
-    'gemini-3.8-flash',
+    'gemini-1.5-flash',
+    'gemini-2.0-flash',
     'gemini-pro-latest',
   ];
 
@@ -144,13 +153,13 @@ export async function processUserMessageWithAI(options: {
     /^\/?(en|english)\b/i.test(text) ||
     /\b(speak|talk|reply|switch to|switch)\s+(in\s+)?english\b/i.test(text)
   ) {
-    contextPrompt += `\nCRITICAL LANGUAGE INSTRUCTION: The student wants to talk in English! You MUST formulate your reply completely in English with your warm, encouraging, brotherly tone. Absolutely no asterisks.`;
+    contextPrompt += `\nCRITICAL LANGUAGE INSTRUCTION: The student wants to talk in English! Formulate your reply completely in clear, intelligent, direct English. Absolutely no asterisks.`;
   } else if (
     languagePreference === 'ar' ||
     /^\/?(ar|arabic|عربي)\b/i.test(text) ||
     /\b(اتكلم|تكلم|خلينا|حول)\s+(بالعربي|عربي)\b/i.test(text)
   ) {
-    contextPrompt += `\nCRITICAL LANGUAGE INSTRUCTION: The student wants to talk in Egyptian Arabic! You MUST formulate your reply in Egyptian Arabic with your warm, encouraging, brotherly tone. Absolutely no asterisks.`;
+    contextPrompt += `\nCRITICAL LANGUAGE INSTRUCTION: The student wants to talk in Arabic! Formulate your reply in clean, polite, direct Arabic without drama or hype. Absolutely no asterisks.`;
   }
   if (userProfile) {
     contextPrompt += `\nStudent Profile: Name: ${userProfile.full_name || 'Student'}, Track: ${userProfile.study_division || 'General'}, Target: ${userProfile.target_percentage || 95}%.`;
@@ -190,7 +199,7 @@ export async function processUserMessageWithAI(options: {
     ? text
     : fileName
     ? `Please read and analyze this attached file ("${fileName}"). Explain what it is about in detail, give me a comprehensive summary, key takeaways, and ask if I have any questions.`
-    : 'Please analyze this content and explain it.';
+    : 'Please analyze this image or document. Read and solve ALL questions and exercises in it completely.';
 
   parts.push({ text: `Student Input: "${userInstruction}"` });
 
@@ -199,8 +208,8 @@ export async function processUserMessageWithAI(options: {
       const model = genAI.getGenerativeModel({
         model: modelName,
         generationConfig: {
-          maxOutputTokens: 1024,
-          temperature: 0.6,
+          maxOutputTokens: 8192,
+          temperature: 0.3,
         },
       });
 

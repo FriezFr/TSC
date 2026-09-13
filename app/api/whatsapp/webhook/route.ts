@@ -33,6 +33,7 @@ export async function POST(req: NextRequest) {
     const contentType = req.headers.get('content-type') || '';
     let fromNumber = '';
     let incomingText = '';
+    let messageId: string | undefined = undefined;
 
     let mediaPart: { mimeType: string; data: string } | undefined = undefined;
     let fileName: string | undefined = undefined;
@@ -51,8 +52,15 @@ export async function POST(req: NextRequest) {
         return NextResponse.json({ status: 'ignored', note: 'No message in payload' });
       }
 
+      messageId = message.id;
       fromNumber = message.from; // e.g. "201012345678"
       incomingText = (message.text?.body || message.caption || '').trim();
+
+      // Immediate Read Receipt & Typing Reaction indicator (gives instant feedback on WhatsApp)
+      if (messageId && fromNumber) {
+        markWhatsAppAsRead(messageId).catch(() => {});
+        reactWhatsAppMessage(fromNumber, messageId, '✍️').catch(() => {});
+      }
 
       // Handle PDF Documents, Images, Audio
       if (message.type === 'document' && message.document) {
@@ -64,7 +72,7 @@ export async function POST(req: NextRequest) {
             data: docMedia.buffer.toString('base64'),
           };
           if (!incomingText) {
-            incomingText = `Please analyze and summarize this attached document: "${fileName}". Explain key concepts, definitions, and exam takeaways clearly.`;
+            incomingText = `Please analyze and summarize this attached document: "${fileName}". Explain key concepts, definitions, and solve or highlight all exam questions clearly.`;
           }
         }
       } else if (message.type === 'image' && message.image) {
@@ -75,7 +83,7 @@ export async function POST(req: NextRequest) {
             data: imgMedia.buffer.toString('base64'),
           };
           if (!incomingText) {
-            incomingText = 'Please analyze and explain this problem or image.';
+            incomingText = 'Please analyze this image or worksheet. Read, solve, and explain ALL questions, problems, and exercises shown in it completely from top to bottom, including all choices and handwritten parts. Do not skip any question.';
           }
         }
       }
@@ -163,18 +171,16 @@ export async function POST(req: NextRequest) {
       .eq('id', userId)
       .maybeSingle();
 
-    // 3. Record User Incoming Message
-    await supabase.from('chat_messages').insert({
-      user_id: userId,
-      role: 'user',
-      source: 'whatsapp',
-      content: incomingText,
-      media_type: 'text',
-    });
-
-    // 4. Multi-Message Context & Schedule Context
+    // 3. Parallelize User Message Logging & Context Fetching
     const threeMinAgo = new Date(Date.now() - 3 * 60 * 1000).toISOString();
-    const [recentHistoryRes, timetableRes, pendingTasksRes, recentNotesRes] = await Promise.all([
+    const [, recentHistoryRes, timetableRes, pendingTasksRes, recentNotesRes] = await Promise.all([
+      supabase.from('chat_messages').insert({
+        user_id: userId,
+        role: 'user',
+        source: 'whatsapp',
+        content: incomingText,
+        media_type: mediaPart ? 'image' : 'text',
+      }),
       supabase
         .from('chat_messages')
         .select('content, created_at')
@@ -235,6 +241,11 @@ export async function POST(req: NextRequest) {
 
     // 8. Send WhatsApp Reply back to student
     await sendWhatsAppReply(fromNumber, finalReply);
+
+    // 9. Update reaction to checkmark
+    if (messageId && fromNumber) {
+      reactWhatsAppMessage(fromNumber, messageId, '✅').catch(() => {});
+    }
 
     return NextResponse.json({ ok: true });
   } catch (err: any) {
@@ -441,6 +452,85 @@ async function executeWhatsAppAction(supabase: any, userId: string, action: any,
   return '';
 }
 
+// Split long responses so they never exceed WhatsApp's 4096-character limit per message
+function splitMessage(text: string, maxLength: number = 3800): string[] {
+  if (text.length <= maxLength) return [text];
+  const chunks: string[] = [];
+  let remaining = text;
+  while (remaining.length > 0) {
+    if (remaining.length <= maxLength) {
+      chunks.push(remaining);
+      break;
+    }
+    let breakIdx = remaining.lastIndexOf('\n\n', maxLength);
+    if (breakIdx === -1 || breakIdx < maxLength / 2) {
+      breakIdx = remaining.lastIndexOf('\n', maxLength);
+    }
+    if (breakIdx === -1 || breakIdx < maxLength / 2) {
+      breakIdx = remaining.lastIndexOf(' ', maxLength);
+    }
+    if (breakIdx === -1) {
+      breakIdx = maxLength;
+    }
+    chunks.push(remaining.substring(0, breakIdx).trim());
+    remaining = remaining.substring(breakIdx).trim();
+  }
+  return chunks;
+}
+
+// Mark incoming message as read immediately (shows instant blue checkmarks to the student)
+async function markWhatsAppAsRead(messageId: string) {
+  const token = process.env.WHATSAPP_ACCESS_TOKEN;
+  const phoneId = process.env.WHATSAPP_PHONE_NUMBER_ID;
+  if (!token || !phoneId || !messageId) return;
+
+  try {
+    await fetch(`https://graph.facebook.com/v20.0/${phoneId}/messages`, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        messaging_product: 'whatsapp',
+        status: 'read',
+        message_id: messageId,
+      }),
+    });
+  } catch (err) {
+    console.error('Failed to mark WhatsApp message as read:', err);
+  }
+}
+
+// React with an emoji (e.g. ✍️ when typing/processing, ✅ when completed)
+async function reactWhatsAppMessage(to: string, messageId: string, emoji: string) {
+  const token = process.env.WHATSAPP_ACCESS_TOKEN;
+  const phoneId = process.env.WHATSAPP_PHONE_NUMBER_ID;
+  if (!token || !phoneId || !messageId) return;
+
+  try {
+    await fetch(`https://graph.facebook.com/v20.0/${phoneId}/messages`, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        messaging_product: 'whatsapp',
+        recipient_type: 'individual',
+        to: to.replace(/\D/g, ''),
+        type: 'reaction',
+        reaction: {
+          message_id: messageId,
+          emoji,
+        },
+      }),
+    });
+  } catch (err) {
+    console.error('Failed to react to WhatsApp message:', err);
+  }
+}
+
 // Clean text for WhatsApp: strip all asterisks and markdown bolding so it's pure normal human font
 function formatForWhatsApp(text: string): string {
   if (!text) return '';
@@ -455,34 +545,37 @@ function formatForWhatsApp(text: string): string {
 // Send message back using Meta WhatsApp Cloud API or Twilio WhatsApp API
 async function sendWhatsAppReply(to: string, text: string) {
   const formattedText = formatForWhatsApp(text);
+  const chunks = splitMessage(formattedText, 3800);
 
   // Option 1: Meta WhatsApp Cloud API
   const metaAccessToken = process.env.WHATSAPP_ACCESS_TOKEN;
   const metaPhoneNumberId = process.env.WHATSAPP_PHONE_NUMBER_ID;
 
   if (metaAccessToken && metaPhoneNumberId) {
-    try {
-      const res = await fetch(`https://graph.facebook.com/v20.0/${metaPhoneNumberId}/messages`, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${metaAccessToken}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          messaging_product: 'whatsapp',
-          to: to.replace(/\D/g, ''),
-          type: 'text',
-          text: { body: formattedText },
-        }),
-      });
-      if (!res.ok) {
-        const errJson = await res.text();
-        console.error('Meta WhatsApp send error:', errJson);
+    for (const chunk of chunks) {
+      try {
+        const res = await fetch(`https://graph.facebook.com/v20.0/${metaPhoneNumberId}/messages`, {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${metaAccessToken}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            messaging_product: 'whatsapp',
+            to: to.replace(/\D/g, ''),
+            type: 'text',
+            text: { body: chunk },
+          }),
+        });
+        if (!res.ok) {
+          const errJson = await res.text();
+          console.error('Meta WhatsApp send error:', errJson);
+        }
+      } catch (err) {
+        console.error('Failed to send WhatsApp message via Meta API:', err);
       }
-      return;
-    } catch (err) {
-      console.error('Failed to send WhatsApp message via Meta API:', err);
     }
+    return;
   }
 
   // Option 2: Twilio WhatsApp API
@@ -491,29 +584,31 @@ async function sendWhatsAppReply(to: string, text: string) {
   const twilioFrom = process.env.TWILIO_WHATSAPP_NUMBER || 'whatsapp:+14155238886';
 
   if (twilioSid && twilioAuth) {
-    try {
-      const toFormatted = to.startsWith('whatsapp:') ? to : `whatsapp:+${to.replace(/\D/g, '')}`;
-      const params = new URLSearchParams();
-      params.append('From', twilioFrom);
-      params.append('To', toFormatted);
-      params.append('Body', formattedText);
+    for (const chunk of chunks) {
+      try {
+        const toFormatted = to.startsWith('whatsapp:') ? to : `whatsapp:+${to.replace(/\D/g, '')}`;
+        const params = new URLSearchParams();
+        params.append('From', twilioFrom);
+        params.append('To', toFormatted);
+        params.append('Body', chunk);
 
-      const res = await fetch(`https://api.twilio.com/2010-04-01/Accounts/${twilioSid}/Messages.json`, {
-        method: 'POST',
-        headers: {
-          'Authorization': 'Basic ' + Buffer.from(`${twilioSid}:${twilioAuth}`).toString('base64'),
-          'Content-Type': 'application/x-www-form-urlencoded',
-        },
-        body: params.toString(),
-      });
-      if (!res.ok) {
-        const errJson = await res.text();
-        console.error('Twilio WhatsApp send error:', errJson);
+        const res = await fetch(`https://api.twilio.com/2010-04-01/Accounts/${twilioSid}/Messages.json`, {
+          method: 'POST',
+          headers: {
+            'Authorization': 'Basic ' + Buffer.from(`${twilioSid}:${twilioAuth}`).toString('base64'),
+            'Content-Type': 'application/x-www-form-urlencoded',
+          },
+          body: params.toString(),
+        });
+        if (!res.ok) {
+          const errJson = await res.text();
+          console.error('Twilio WhatsApp send error:', errJson);
+        }
+      } catch (err) {
+        console.error('Failed to send WhatsApp message via Twilio API:', err);
       }
-      return;
-    } catch (err) {
-      console.error('Failed to send WhatsApp message via Twilio API:', err);
     }
+    return;
   }
 
   console.log(`[WhatsApp Local / Mock Reply to ${to}]: ${formattedText}`);
