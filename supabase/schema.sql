@@ -268,3 +268,47 @@ CREATE POLICY "Users can insert their own chat messages" ON public.chat_messages
   FOR INSERT WITH CHECK (auth.uid() = user_id);
 
 CREATE INDEX IF NOT EXISTS idx_chat_messages_user_created ON public.chat_messages(user_id, created_at DESC);
+
+-- 14. AI ACTIVITY LOGS (Reversible Actions & History Feed)
+CREATE TABLE IF NOT EXISTS public.ai_activity_logs (
+  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  user_id UUID REFERENCES auth.users(id) ON DELETE CASCADE NOT NULL,
+  action_type TEXT NOT NULL, -- 'CREATE_TASK', 'UPDATE_LESSON', 'CANCEL_LESSON', 'CONFLICT_DETECTED', 'DAILY_PLAN'
+  title TEXT NOT NULL,
+  description TEXT,
+  source TEXT NOT NULL DEFAULT 'ai_copilot', -- 'whatsapp' | 'telegram' | 'web_importer' | 'ai_copilot'
+  target_id TEXT,
+  target_table TEXT,
+  previous_state JSONB,
+  is_undone BOOLEAN DEFAULT FALSE,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+ALTER TABLE public.ai_activity_logs ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "Users can view their own AI activity" ON public.ai_activity_logs
+  FOR SELECT USING (auth.uid() = user_id);
+CREATE POLICY "Users can insert their own AI activity" ON public.ai_activity_logs
+  FOR INSERT WITH CHECK (auth.uid() = user_id);
+CREATE POLICY "Users can update their own AI activity" ON public.ai_activity_logs
+  FOR UPDATE USING (auth.uid() = user_id);
+CREATE POLICY "Users can delete their own AI activity" ON public.ai_activity_logs
+  FOR DELETE USING (auth.uid() = user_id);
+
+CREATE INDEX IF NOT EXISTS idx_ai_activity_user_created ON public.ai_activity_logs(user_id, created_at DESC);
+
+-- 15. USER PREFERENCES (Learned scheduling patterns & study habits)
+CREATE TABLE IF NOT EXISTS public.user_preferences (
+  user_id UUID REFERENCES auth.users(id) ON DELETE CASCADE PRIMARY KEY,
+  preferences JSONB DEFAULT '{}',
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+ALTER TABLE public.user_preferences ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "Users can view their own preferences" ON public.user_preferences
+  FOR SELECT USING (auth.uid() = user_id);
+CREATE POLICY "Users can update their own preferences" ON public.user_preferences
+  FOR ALL USING (auth.uid() = user_id) WITH CHECK (auth.uid() = user_id);
+

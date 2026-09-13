@@ -429,37 +429,59 @@ export async function POST(req: NextRequest) {
       content: rawText,
     });
 
-    // Fetch recent notes / study context so the AI remembers recently sent documents
-    const { data: recentNotes } = await supabase
-      .from('notes')
-      .select('content')
-      .eq('user_id', userId)
-      .order('created_at', { ascending: false })
-      .limit(2);
+    // 1. Fetch recent messages in the last 3 minutes for multi-message combining
+    const threeMinAgo = new Date(Date.now() - 3 * 60 * 1000).toISOString();
+    const [recentHistoryRes, timetableRes, pendingTasksRes, recentNotesRes] = await Promise.all([
+      supabase
+        .from('chat_messages')
+        .select('content, created_at')
+        .eq('user_id', userId)
+        .eq('role', 'user')
+        .gte('created_at', threeMinAgo)
+        .order('created_at', { ascending: true })
+        .limit(4),
+      supabase.from('timetable').select('*').eq('user_id', userId),
+      supabase.from('assignments').select('*').eq('user_id', userId).eq('is_completed', false).limit(10),
+      supabase.from('notes').select('content').eq('user_id', userId).order('created_at', { ascending: false }).limit(2),
+    ]);
 
-    const recentContext = recentNotes?.map((n: any) => n.content).join('\n---\n');
+    const recentHistory = recentHistoryRes.data?.map((m: any) => ({ text: m.content, time: m.created_at })) || [];
+    const timetableSlots = timetableRes.data || [];
+    const pendingTasks = pendingTasksRes.data || [];
+
+    // Build schedule context string so AI can answer schedule queries
+    const scheduleContext = `Scheduled Classes: ${timetableSlots.map((s: any) => `Day ${s.day_of_week}: ${s.subject} (${s.start_time}-${s.end_time})`).join(', ') || 'No classes registered yet'}\nPending Homework: ${pendingTasks.map((t: any) => `${t.title} (${t.subject}, Due: ${t.due_date})`).join(', ') || 'None'}`;
+    const recentNotes = recentNotesRes.data?.map((n: any) => n.content).join('\n---\n');
 
     // Process text with AI
     const aiResponse = await processUserMessageWithAI({
       text: rawText,
       userProfile: profile,
-      recentContext: recentContext || undefined,
+      scheduleContext,
+      recentMessages: recentHistory,
+      recentContext: recentNotes || undefined,
     });
 
-    // If an action was extracted, execute it in Supabase
-    if (aiResponse.action) {
-      await executeDashboardAction(supabase, userId, aiResponse.action);
+    // If an actionable task was extracted with sufficient confidence, execute and log it
+    let actionFeedback = '';
+    if (aiResponse.action && (aiResponse.confidence ?? 1.0) >= 0.7) {
+      actionFeedback = await executeDashboardAction(supabase, userId, aiResponse.action, 'telegram');
+    }
+
+    let finalReply = aiResponse.reply;
+    if (actionFeedback) {
+      finalReply += `\n\n${actionFeedback}`;
     }
 
     // Record AI assistant reply for dashboard sync
     await recordChatMessage(supabase, {
       userId,
       role: 'assistant',
-      content: aiResponse.reply,
+      content: finalReply,
     });
 
     // ALWAYS reply with AI!
-    await sendTelegramReply(chatId, aiResponse.reply);
+    await sendTelegramReply(chatId, finalReply);
     return NextResponse.json({ ok: true });
   } catch (err) {
     console.error('Telegram webhook processing error:', err);
@@ -467,47 +489,216 @@ export async function POST(req: NextRequest) {
   }
 }
 
-// Helper to execute detected dashboard actions
+// Helper to execute detected dashboard actions and log to ai_activity_logs with 1-click Undo state
 async function executeDashboardAction(
   supabase: any,
   userId: string,
-  action: any
-) {
-  if (!action || !action.type) return;
+  action: any,
+  source: 'telegram' | 'whatsapp' = 'telegram'
+): Promise<string> {
+  if (!action || !action.type) return '';
 
   try {
     const today = new Date().toISOString().split('T')[0];
     const data = action.data || action;
 
+    // A. LESSON CHANGE / RESCHEDULE
+    if (action.type === 'lesson_change') {
+      const subject = data.subject || 'General';
+      const dayIndex = typeof data.dayIndex === 'number' ? data.dayIndex : 0;
+      const startTime = data.startTime || '08:00';
+      const endTime = data.endTime || '09:30';
+
+      // Check existing slot
+      const { data: existingSlots } = await supabase
+        .from('timetable')
+        .select('*')
+        .eq('user_id', userId)
+        .ilike('subject', subject);
+
+      const targetSlot = existingSlots?.[0];
+
+      if (targetSlot) {
+        // Update existing slot
+        await supabase
+          .from('timetable')
+          .update({
+            day_of_week: dayIndex,
+            start_time: startTime,
+            end_time: endTime,
+          })
+          .eq('id', targetSlot.id);
+
+        await supabase.from('ai_activity_logs').insert({
+          user_id: userId,
+          action_type: 'UPDATE_LESSON',
+          title: `تعديل موعد حصة ${subject}`,
+          description: `تم نقل الموعد ليوم ${data.dayName || dayIndex} الساعة ${startTime}`,
+          source,
+          target_id: targetSlot.id,
+          target_table: 'timetable',
+          previous_state: targetSlot,
+        });
+
+        return `🔄 تم تعديل موعد حصة ${subject} في جدولك!`;
+      } else {
+        // Insert new slot
+        const { data: newSlot } = await supabase
+          .from('timetable')
+          .insert({
+            user_id: userId,
+            subject,
+            day_of_week: dayIndex,
+            start_time: startTime,
+            end_time: endTime,
+          })
+          .select('*')
+          .single();
+
+        await supabase.from('ai_activity_logs').insert({
+          user_id: userId,
+          action_type: 'UPDATE_LESSON',
+          title: `إضافة حصة ${subject}`,
+          description: `يوم ${data.dayName || dayIndex} الساعة ${startTime}`,
+          source,
+          target_id: newSlot?.id,
+          target_table: 'timetable',
+          previous_state: null,
+        });
+
+        return `✓ تم إضافة حصة ${subject} لجدولك!`;
+      }
+    }
+
+    // B. LESSON CANCELLED
+    if (action.type === 'lesson_cancel') {
+      const subject = data.subject || 'General';
+      const { data: existingSlots } = await supabase
+        .from('timetable')
+        .select('*')
+        .eq('user_id', userId)
+        .ilike('subject', subject);
+
+      const targetSlot = existingSlots?.[0];
+      if (targetSlot) {
+        await supabase.from('timetable').delete().eq('id', targetSlot.id);
+
+        await supabase.from('ai_activity_logs').insert({
+          user_id: userId,
+          action_type: 'CANCEL_LESSON',
+          title: `إلغاء حصة ${subject}`,
+          description: `تم حذف الحصة من الجدول بناءً على التنبيه`,
+          source,
+          target_id: targetSlot.id,
+          target_table: 'timetable',
+          previous_state: targetSlot,
+        });
+
+        return `✓ تم تسجيل إلغاء حصة ${subject} وحذفها من الجدول.`;
+      }
+      return '';
+    }
+
+    // C. HOMEWORK / ASSIGNMENT
     if (action.type === 'assignment') {
-      await supabase.from('assignments').insert({
+      const title = data.title || 'Homework';
+      const subject = data.subject || 'General';
+      const dueDate = data.date || today;
+
+      // Duplicate protection: check if same title & subject exists
+      const { data: existingA } = await supabase
+        .from('assignments')
+        .select('*')
+        .eq('user_id', userId)
+        .ilike('title', title)
+        .ilike('subject', subject)
+        .maybeSingle();
+
+      if (existingA) {
+        // Update due date
+        await supabase
+          .from('assignments')
+          .update({ due_date: dueDate })
+          .eq('id', existingA.id);
+
+        return `🔄 تم تحديث موعد تسليم ${title} إلى ${dueDate}.`;
+      }
+
+      const { data: newAssignment } = await supabase
+        .from('assignments')
+        .insert({
+          user_id: userId,
+          title,
+          subject,
+          due_date: dueDate,
+          priority: data.priority || 'medium',
+          is_completed: false,
+        })
+        .select('*')
+        .single();
+
+      await supabase.from('ai_activity_logs').insert({
         user_id: userId,
-        title: data.title || 'Homework',
-        subject: data.subject || 'General',
-        due_date: data.date || today,
-        priority: 'medium',
-        is_completed: false,
+        action_type: 'CREATE_TASK',
+        title: `إضافة واجب: ${title}`,
+        description: `المادة: ${subject} • موعد التسليم: ${dueDate}`,
+        source,
+        target_id: newAssignment?.id,
+        target_table: 'assignments',
+        previous_state: null,
       });
-    } else if (action.type === 'exam') {
-      await supabase.from('exams').insert({
+
+      return `✓ تم تسجيل الواجب في جدولك (تسليم: ${dueDate}).`;
+    }
+
+    // D. EXAM
+    if (action.type === 'exam') {
+      const subject = data.subject || 'General';
+      const examDate = data.date || today;
+
+      const { data: newExam } = await supabase
+        .from('exams')
+        .insert({
+          user_id: userId,
+          subject,
+          exam_date: examDate,
+          notes: data.title || undefined,
+        })
+        .select('*')
+        .single();
+
+      await supabase.from('ai_activity_logs').insert({
         user_id: userId,
-        subject: data.subject || 'General',
-        exam_date: data.date || today,
-        notes: data.title || undefined,
+        action_type: 'CREATE_TASK',
+        title: `تسجيل امتحان ${subject}`,
+        description: `الموعد: ${examDate}`,
+        source,
+        target_id: newExam?.id,
+        target_table: 'exams',
+        previous_state: null,
       });
-    } else if (action.type === 'grade') {
+
+      return `📅 تم تسجيل امتحان ${subject} يوم ${examDate}.`;
+    }
+
+    // E. GRADE
+    if (action.type === 'grade') {
       const score = Number(data.score) || 0;
       const maxScore = Number(data.max_score) || 60;
       await supabase.from('grades').insert({
         user_id: userId,
         subject: data.subject || 'General',
-        title: data.title || `Telegram Log (${today})`,
+        title: data.title || `Bot Log (${today})`,
         score,
         max_score: maxScore,
         weight: 1.0,
         date: today,
       });
-    } else if (action.type === 'habit') {
+      return `📊 تم تسجيل الدرجة (${score}/${maxScore}).`;
+    }
+
+    // F. HABIT
+    if (action.type === 'habit') {
       const habitValue = Number(data.value) || 1;
       const { data: userHabits } = await supabase.from('habits').select('*').eq('user_id', userId);
       const targetHabit = userHabits?.[0];
@@ -524,10 +715,12 @@ async function executeDashboardAction(
           { onConflict: 'user_id,habit_id,date' }
         );
       }
+      return `⚡ تم تسجيل العادة اليومية.`;
     }
   } catch (err) {
     console.error('Error executing dashboard action:', err);
   }
+  return '';
 }
 
 export async function GET() {

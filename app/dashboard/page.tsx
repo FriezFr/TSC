@@ -15,9 +15,13 @@ import {
   Trash2,
   Check,
   Sparkles,
+  AlertTriangle,
 } from 'lucide-react';
 import Link from 'next/link';
 import ScheduleImportModal from '@/components/ScheduleImporter/ScheduleImportModal';
+import DailyPlannerModal from '@/components/AI/DailyPlannerModal';
+import AiActivityFeed from '@/components/AI/AiActivityFeed';
+import { DailyPlanResponse } from '@/lib/types';
 
 export default function TodayViewPage() {
   const [isImporterOpen, setIsImporterOpen] = useState(false);
@@ -35,11 +39,51 @@ export default function TodayViewPage() {
     sessions,
     language,
     t,
+    aiActivities,
+    undoAiActivity,
+    clearAiActivities,
+    conflicts,
+    userPreferences,
   } = useApp();
 
   const [isTimetableModalOpen, setIsTimetableModalOpen] = useState(false);
+  const [isPlannerOpen, setIsPlannerOpen] = useState(false);
+  const [dailyPlan, setDailyPlan] = useState<DailyPlanResponse | null>(null);
+  const [isPlanLoading, setIsPlanLoading] = useState(false);
   const [quickTaskText, setQuickTaskText] = useState('');
   const [quickTasks, setQuickTasks] = useState<{ id: string; text: string; done: boolean }[]>([]);
+
+  const handleGeneratePlan = async () => {
+    setIsPlanLoading(true);
+    try {
+      const res = await fetch('/api/schedule/plan-day', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          timetable,
+          assignments,
+          exams,
+          preferences: userPreferences,
+          dayIndex: mappedDayIndex,
+        }),
+      });
+      const data = await res.json();
+      if (data.plan) {
+        setDailyPlan(data.plan);
+      }
+    } catch (err) {
+      console.error('Error generating daily plan:', err);
+    } finally {
+      setIsPlanLoading(false);
+    }
+  };
+
+  const handleOpenPlanner = () => {
+    setIsPlannerOpen(true);
+    if (!dailyPlan) {
+      handleGeneratePlan();
+    }
+  };
 
   // Timetable Slot Form State
   const [newDay, setNewDay] = useState<number>(0);
@@ -151,7 +195,15 @@ export default function TodayViewPage() {
             </p>
           </div>
 
-          <div className="flex items-center gap-2 self-start sm:self-center">
+          <div className="flex items-center gap-2 self-start sm:self-center flex-wrap">
+            <button
+              onClick={handleOpenPlanner}
+              className="px-3.5 py-2 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white text-xs font-bold flex items-center justify-center gap-1.5 cursor-pointer shadow-sm shadow-blue-500/25 transition-all"
+            >
+              <Sparkles className="w-3.5 h-3.5 text-blue-200" />
+              <span>{language === 'ar' ? 'خطط ليومي' : 'Plan My Day'}</span>
+            </button>
+
             <button
               onClick={() => setIsImporterOpen(true)}
               className="px-3.5 py-2 rounded-xl bg-white text-black hover:bg-neutral-200 text-xs font-bold flex items-center justify-center gap-1.5 cursor-pointer shadow-sm shadow-white/20 transition-all"
@@ -169,6 +221,35 @@ export default function TodayViewPage() {
           </div>
         </div>
       </GlassCard>
+
+      {/* Schedule Conflicts & Optimization Alerts */}
+      {conflicts.length > 0 && (
+        <div className="p-4 rounded-2xl bg-amber-500/10 border border-amber-500/20 text-amber-200 space-y-2">
+          <div className="flex items-center gap-2 font-bold text-xs">
+            <AlertTriangle className="w-4 h-4 text-amber-400" />
+            <span>
+              {language === 'ar' ? 'تنبيه تعارض في الجدول' : 'Schedule Conflicts Detected'} ({conflicts.length})
+            </span>
+          </div>
+          <div className="space-y-1.5">
+            {conflicts.map((c) => (
+              <div
+                key={c.id}
+                className="text-[11px] text-amber-300/90 flex flex-col sm:flex-row sm:items-center justify-between gap-1.5 p-2.5 rounded-xl bg-black/30 border border-amber-500/15"
+              >
+                <div>
+                  <span className="font-semibold text-white">{c.title}</span> — {c.description}
+                </div>
+                {c.recommendation && (
+                  <span className="text-[10px] text-amber-300 font-medium shrink-0 bg-amber-500/20 px-2 py-0.5 rounded-md">
+                    💡 {c.recommendation}
+                  </span>
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* Metrics Row */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
@@ -386,6 +467,13 @@ export default function TodayViewPage() {
         </div>
       </div>
 
+      {/* AI Assistant Activity Feed & 1-Click Undo */}
+      <AiActivityFeed
+        activities={aiActivities}
+        onUndo={undoAiActivity}
+        onClearHistory={clearAiActivities}
+      />
+
       {/* Add Class Modal */}
       <GlassModal
         isOpen={isTimetableModalOpen}
@@ -476,6 +564,15 @@ export default function TodayViewPage() {
       <ScheduleImportModal
         isOpen={isImporterOpen}
         onClose={() => setIsImporterOpen(false)}
+      />
+
+      {/* AI Daily Planner Modal */}
+      <DailyPlannerModal
+        isOpen={isPlannerOpen}
+        onClose={() => setIsPlannerOpen(false)}
+        plan={dailyPlan}
+        isLoading={isPlanLoading}
+        onRegenerate={handleGeneratePlan}
       />
     </div>
   );

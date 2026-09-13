@@ -222,3 +222,83 @@ export interface ChatMessage {
   media_name?: string;
   created_at: string;
 }
+
+// ----------------------------------------------------
+// AI Personal School Assistant Types
+// ----------------------------------------------------
+
+export type MessageClassification =
+  | 'IMPORTANT_SCHEDULE'
+  | 'HOMEWORK'
+  | 'EXAM'
+  | 'QUIZ'
+  | 'DEADLINE'
+  | 'LESSON_CHANGE'
+  | 'LESSON_CANCELLED'
+  | 'LESSON_ADDED'
+  | 'ANNOUNCEMENT'
+  | 'STUDY_MATERIAL'
+  | 'REMINDER'
+  | 'SCHEDULE_QUERY'
+  | 'PLAN_MY_DAY_QUERY'
+  | 'IRRELEVANT'
+  | 'UNKNOWN';
+
+export interface AiActivityItem {
+  id: string;
+  user_id?: string;
+  action_type: 'CREATE_TASK' | 'UPDATE_LESSON' | 'CANCEL_LESSON' | 'CONFLICT_DETECTED' | 'DAILY_PLAN';
+  title: string;
+  description?: string;
+  source: 'whatsapp' | 'telegram' | 'web_importer' | 'ai_copilot';
+  target_id?: string;
+  target_table?: 'assignments' | 'timetable' | 'exams' | 'study_blocks';
+  previous_state?: any; // For 1-click Undo capability
+  is_undone?: boolean;
+  created_at: string;
+}
+
+export interface UserPreferences {
+  preferredStudyTimes?: string[]; // e.g. ["16:00-20:00", "after_maghrib"]
+  subjectPreferences?: {
+    [subject: string]: {
+      preferredDays?: string[];
+      averageDurationMinutes?: number;
+    };
+  };
+  averageTaskCompletionTime?: {
+    [taskType: string]: number; // minutes
+  };
+  avoidTimes?: string[]; // e.g. ["14:00-16:00"]
+  schedulingRules?: string[];
+}
+
+export interface ScheduleConflict {
+  id: string;
+  type: 'overlapping_lessons' | 'multiple_exams_same_day' | 'excessive_workload' | 'rescheduled_lesson' | 'impossible_deadline';
+  severity: 'low' | 'medium' | 'high';
+  title: string;
+  description: string;
+  recommendation?: string;
+  date?: string;
+  relatedItems?: string[];
+}
+
+export interface DailyPlanBlock {
+  id: string;
+  startTime: string; // "16:00"
+  endTime: string; // "16:45"
+  durationMinutes: number;
+  title: string;
+  subject?: string;
+  type: 'lesson' | 'homework' | 'revision' | 'break' | 'exam_prep';
+  isBreak: boolean;
+  notes?: string;
+}
+
+export interface DailyPlanResponse {
+  date: string;
+  summary: string;
+  blocks: DailyPlanBlock[];
+  recommendations: string[];
+}

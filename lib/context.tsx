@@ -16,9 +16,14 @@ import {
   ChatMessage,
   ParsedLessonSlot,
   ParsedScheduleTask,
+  AiActivityItem,
+  UserPreferences,
+  ScheduleConflict,
 } from './types';
 import { getSupabaseClient } from './supabase/client';
 import { Language, Translations, translations } from './i18n';
+import { detectScheduleConflicts } from './scheduling/conflicts';
+import { loadUserPreferences, saveUserPreferences, DEFAULT_PREFERENCES } from './scheduling/preferences';
 
 interface AppContextType {
   user: User | null;
@@ -84,6 +89,15 @@ interface AppContextType {
   sendChatMessage: (content: string) => Promise<void>;
   refreshChatMessages: () => Promise<void>;
   clearChatMessages: () => Promise<void>;
+  // AI Assistant & Activities (with 1-click Undo)
+  aiActivities: AiActivityItem[];
+  undoAiActivity: (id: string) => Promise<{ success: boolean; message: string }>;
+  clearAiActivities: () => Promise<void>;
+  refreshAiActivities: () => Promise<void>;
+  // Conflicts & Preferences
+  conflicts: ScheduleConflict[];
+  userPreferences: UserPreferences;
+  updateUserPreferences: (prefs: Partial<UserPreferences>) => Promise<void>;
 }
 
 const AppContext = createContext<AppContextType | null>(null);
@@ -146,6 +160,14 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const [telegramCode, setTelegramCode] = useState<string>('');
   const [telegramLinked, setTelegramLinked] = useState<boolean>(false);
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
+  const [aiActivities, setAiActivities] = useState<AiActivityItem[]>([]);
+  const [userPreferences, setUserPreferences] = useState<UserPreferences>(DEFAULT_PREFERENCES);
+
+  // Auto-calculated conflicts
+  const conflicts = React.useMemo(
+    () => detectScheduleConflicts(timetable, assignments, exams),
+    [timetable, assignments, exams]
+  );
 
   // Fetch all user tables from Supabase
   const loadUserData = useCallback(async (userId: string) => {
@@ -280,6 +302,19 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         .eq('user_id', userId)
         .order('created_at', { ascending: true });
       if (chatData) setChatMessages(chatData);
+
+      // 12. AI Activity Logs
+      const { data: actData } = await supabase
+        .from('ai_activity_logs')
+        .select('*')
+        .eq('user_id', userId)
+        .order('created_at', { ascending: false })
+        .limit(30);
+      if (actData) setAiActivities(actData);
+
+      // 13. User Scheduling Preferences
+      const prefs = await loadUserPreferences(supabase, userId);
+      setUserPreferences(prefs);
     } catch (err) {
       console.error('Error fetching Supabase data:', err);
     }
@@ -321,6 +356,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         setHabits([]);
         setHabitLogs([]);
         setNotes([]);
+        setAiActivities([]);
+        setUserPreferences(DEFAULT_PREFERENCES);
       }
       setAuthLoading(false);
     });
@@ -970,6 +1007,71 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     return code;
   };
 
+  // AI Activity and 1-Click Undo
+  const refreshAiActivities = async () => {
+    const supabase = getSupabaseClient();
+    if (supabase && user) {
+      const { data: actData } = await supabase
+        .from('ai_activity_logs')
+        .select('*')
+        .eq('user_id', user.id)
+        .order('created_at', { ascending: false })
+        .limit(30);
+      if (actData) setAiActivities(actData);
+    }
+  };
+
+  const undoAiActivity = async (id: string): Promise<{ success: boolean; message: string }> => {
+    const targetAct = aiActivities.find((a) => a.id === id);
+    if (!targetAct) return { success: false, message: 'Activity not found' };
+
+    const supabase = getSupabaseClient();
+
+    try {
+      if (targetAct.target_table === 'assignments' && targetAct.target_id) {
+        if (targetAct.action_type === 'CREATE_TASK') {
+          await deleteAssignment(targetAct.target_id);
+        } else if (targetAct.previous_state) {
+          await updateAssignment(targetAct.target_id, targetAct.previous_state);
+        }
+      } else if (targetAct.target_table === 'timetable' && targetAct.target_id) {
+        if (targetAct.previous_state) {
+          await updateTimetableSlot(targetAct.target_id, targetAct.previous_state);
+        } else if (targetAct.action_type === 'CREATE_TASK') {
+          await deleteTimetableSlot(targetAct.target_id);
+        }
+      }
+
+      if (supabase && user) {
+        await supabase.from('ai_activity_logs').update({ is_undone: true }).eq('id', id);
+      }
+
+      setAiActivities((prev) =>
+        prev.map((a) => (a.id === id ? { ...a, is_undone: true } : a))
+      );
+
+      return { success: true, message: 'تم التراجع بنجاح' };
+    } catch (err: any) {
+      console.error('Error undoing activity:', err);
+      return { success: false, message: err.message || 'Failed to undo' };
+    }
+  };
+
+  const clearAiActivities = async () => {
+    setAiActivities([]);
+    const supabase = getSupabaseClient();
+    if (supabase && user) {
+      await supabase.from('ai_activity_logs').delete().eq('user_id', user.id);
+    }
+  };
+
+  const updateUserPreferences = async (prefs: Partial<UserPreferences>) => {
+    const updated = { ...userPreferences, ...prefs };
+    setUserPreferences(updated);
+    const supabase = getSupabaseClient();
+    await saveUserPreferences(supabase, user?.id, updated);
+  };
+
   return (
     <AppContext.Provider
       value={{
@@ -1021,6 +1123,13 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         sendChatMessage,
         refreshChatMessages,
         clearChatMessages,
+        aiActivities,
+        undoAiActivity,
+        clearAiActivities,
+        refreshAiActivities,
+        conflicts,
+        userPreferences,
+        updateUserPreferences,
       }}
     >
       {children}
