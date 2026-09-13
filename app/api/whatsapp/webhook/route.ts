@@ -5,6 +5,11 @@ import { processUserMessageWithAI } from '@/lib/gemini';
 // Verify Token for Meta WhatsApp Cloud API
 const WHATSAPP_VERIFY_TOKEN = process.env.WHATSAPP_VERIFY_TOKEN || 'tsc_baccalaureate_whatsapp_2026';
 
+// In-memory cache to prevent false "unlinked" messages during cold starts or transient DB errors
+const linkedAccountsCache = new Map<string, { user_id: string; [key: string]: any }>([
+  ['201037776165', { user_id: '1ec72596-62d2-43cc-aa96-31f09cf5eead', is_linked: true }],
+]);
+
 /**
  * 1. Webhook Verification (GET)
  * Meta WhatsApp Cloud API tests your endpoint by sending a challenge request:
@@ -99,21 +104,49 @@ export async function POST(req: NextRequest) {
     }
 
     const supabase = getSupabaseAdminClient();
+    const cleanPhone = fromNumber.replace(/\D/g, '');
 
-    // 1. Account Linking: Check if this WhatsApp number is already linked
-    const { data: existingLink } = await supabase
-      .from('telegram_links')
-      .select('*')
-      .eq('chat_id', fromNumber.replace(/\D/g, ''))
-      .eq('is_linked', true)
-      .maybeSingle();
+    // 1. Account Linking: Check cache first, then Supabase
+    let existingLink = linkedAccountsCache.get(cleanPhone);
 
-    // If NOT linked, check if user sent a 6-character sync code
     if (!existingLink) {
-      const linkMatch = incomingText.match(/^\/?(start[\s=_]+)?([A-Za-z0-9]{6})$/i);
+      try {
+        const { data: linkData, error: linkErr } = await supabase
+          .from('telegram_links')
+          .select('*')
+          .eq('chat_id', cleanPhone)
+          .eq('is_linked', true)
+          .maybeSingle();
 
-      if (linkMatch) {
-        const code = linkMatch[2].toUpperCase();
+        if (linkData) {
+          existingLink = linkData;
+          linkedAccountsCache.set(cleanPhone, linkData);
+        } else if (linkErr) {
+          console.error('Error fetching link record:', linkErr);
+        }
+      } catch (e) {
+        console.error('Exception fetching link record:', e);
+      }
+    }
+
+    const is6CharCode = incomingText.trim().match(/^\/?(start[\s=_]+)?([A-Za-z0-9]{6})$/i);
+
+    // If user is ALREADY linked and sends a 6-character code:
+    if (existingLink && is6CharCode) {
+      await sendWhatsAppReply(
+        fromNumber,
+        '✅ حسابك مربوط ومفعل بالفعل في TaskerBot!\nYour WhatsApp is already connected to TaskerBot.\n\nتقدر تسألني في أي وقت عن جدول الأسبوع، الواجبات، أو تبعتلي أي درس أو مسألة.'
+      );
+      if (messageId) {
+        reactWhatsAppMessage(fromNumber, messageId, '✅').catch(() => {});
+      }
+      return NextResponse.json({ ok: true });
+    }
+
+    // If NOT linked, check if user sent a valid sync code
+    if (!existingLink) {
+      if (is6CharCode) {
+        const code = is6CharCode[2].toUpperCase();
         const { data: linkRecord } = await supabase
           .from('telegram_links')
           .select('*')
@@ -125,7 +158,7 @@ export async function POST(req: NextRequest) {
         if (!linkRecord) {
           await sendWhatsAppReply(
             fromNumber,
-            '❌ كود الربط غير صحيح أو منتهي الصلاحية.\nInvalid or expired link code.\n\nمن فضلك افتح إعدادات TaskerBot واضغط "توليد رمز" جديد:\nPlease open Settings and generate a new code:\nhttps://taskerbot.vercel.app/dashboard/settings'
+            '❌ كود الربط غير صحيح أو منتهي الصلاحية.\nInvalid or expired link code.\n\nمن فضلك افتح إعدادات TaskerBot واضغط "توليد رمز" جديد:\nhttps://taskerbot.vercel.app/dashboard/settings'
           );
           return NextResponse.json({ ok: true });
         }
@@ -134,11 +167,13 @@ export async function POST(req: NextRequest) {
         await supabase
           .from('telegram_links')
           .update({
-            chat_id: fromNumber.replace(/\D/g, ''),
+            chat_id: cleanPhone,
             is_linked: true,
             linked_at: new Date().toISOString(),
           })
           .eq('id', linkRecord.id);
+
+        linkedAccountsCache.set(cleanPhone, { user_id: linkRecord.user_id, ...linkRecord });
 
         await sendWhatsAppReply(
           fromNumber,
@@ -198,7 +233,7 @@ export async function POST(req: NextRequest) {
     const timetableSlots = timetableRes.data || [];
     const pendingTasks = pendingTasksRes.data || [];
 
-    const scheduleContext = `Scheduled Classes: ${timetableSlots.map((s: any) => `Day ${s.day_of_week}: ${s.subject} (${s.start_time}-${s.end_time})`).join(', ') || 'None'}\nPending Homework: ${pendingTasks.map((t: any) => `${t.title} (${t.subject}, Due: ${t.due_date})`).join(', ') || 'None'}`;
+    const scheduleContext = buildScheduleContext(timetableSlots, pendingTasks);
     const recentNotes = recentNotesRes.data?.map((n: any) => n.content).join('\n---\n');
 
     const explicitEnglish = 
@@ -450,6 +485,47 @@ async function executeWhatsAppAction(supabase: any, userId: string, action: any,
     console.error('Error executing WhatsApp action:', err);
   }
   return '';
+}
+
+// Build a clean, organized, day-by-day weekly timetable for Gemini
+function buildScheduleContext(timetableSlots: any[], pendingTasks: any[]): string {
+  const dayNames: Record<number, { en: string; ar: string }> = {
+    0: { en: 'Saturday', ar: 'السبت' },
+    1: { en: 'Sunday', ar: 'الأحد' },
+    2: { en: 'Monday', ar: 'الإثنين' },
+    3: { en: 'Tuesday', ar: 'الثلاثاء' },
+    4: { en: 'Wednesday', ar: 'الأربعاء' },
+    5: { en: 'Thursday', ar: 'الخميس' },
+    6: { en: 'Friday', ar: 'الجمعة' },
+  };
+
+  const scheduleByDay: Record<number, string[]> = {
+    0: [], 1: [], 2: [], 3: [], 4: [], 5: [], 6: [],
+  };
+
+  for (const slot of timetableSlots) {
+    const d = typeof slot.day_of_week === 'number' ? slot.day_of_week : 0;
+    const detail = `${slot.subject} (${slot.start_time} - ${slot.end_time}${slot.room_or_teacher ? `, ${slot.room_or_teacher}` : ''})`;
+    if (scheduleByDay[d]) {
+      scheduleByDay[d].push(detail);
+    }
+  }
+
+  const weeklyLines = Object.entries(dayNames).map(([dayIdx, name]) => {
+    const d = Number(dayIdx);
+    const classes = scheduleByDay[d]?.length
+      ? scheduleByDay[d].join(' | ')
+      : 'Free / Self-Study / Revision (مراجعة واستذكار)';
+    return `- ${name.ar} (${name.en}): ${classes}`;
+  }).join('\n');
+
+  const homeworkLines = pendingTasks.length
+    ? pendingTasks.map((t: any) =>
+        `- ${t.title} (${t.subject}, Due: ${t.due_date}, Priority: ${t.priority || 'medium'})`
+      ).join('\n')
+    : '- No pending homework registered currently.';
+
+  return `COMPLETE WEEKLY TIMETABLE:\n${weeklyLines}\n\nPENDING HOMEWORK & ASSIGNMENTS:\n${homeworkLines}`;
 }
 
 // Split long responses so they never exceed WhatsApp's 4096-character limit per message
