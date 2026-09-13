@@ -17,6 +17,7 @@ import {
   AlertCircle,
   ExternalLink,
   Sparkles,
+  MessageCircle,
 } from 'lucide-react';
 import Link from 'next/link';
 
@@ -149,9 +150,18 @@ export default function ChatDashboardPage() {
             className="px-3.5 py-2 rounded-xl bg-sky-500/15 hover:bg-sky-500/25 border border-sky-500/30 text-sky-300 text-xs font-bold flex items-center gap-1.5 transition-all shadow-sm cursor-pointer"
           >
             <Send className="w-3.5 h-3.5" />
-            <span>Open @TSCTaskerBot</span>
+            <span>@TSCTaskerBot</span>
             <ExternalLink className="w-3 h-3 opacity-70" />
           </a>
+
+          {/* WhatsApp Assistant Link */}
+          <Link
+            href="/dashboard/settings"
+            className="px-3.5 py-2 rounded-xl bg-emerald-500/15 hover:bg-emerald-500/25 border border-emerald-500/30 text-emerald-300 text-xs font-bold flex items-center gap-1.5 transition-all shadow-sm cursor-pointer"
+          >
+            <MessageCircle className="w-3.5 h-3.5" />
+            <span>WhatsApp Bot</span>
+          </Link>
 
           <button
             onClick={handleRefresh}

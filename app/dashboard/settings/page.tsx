@@ -16,6 +16,7 @@ import {
   Code,
   Languages,
   Globe,
+  MessageCircle,
 } from 'lucide-react';
 import { getSupabaseClient } from '@/lib/supabase/client';
 import { useRouter } from 'next/navigation';
@@ -37,13 +38,17 @@ export default function SettingsPage() {
 
   const [copiedCode, setCopiedCode] = useState(false);
   const [copiedWebhook, setCopiedWebhook] = useState(false);
+  const [copiedWhatsAppWebhook, setCopiedWhatsAppWebhook] = useState(false);
+  const [copiedVerifyToken, setCopiedVerifyToken] = useState(false);
   const [newPassword, setNewPassword] = useState('');
   const [passwordStatus, setPasswordStatus] = useState('');
   const [isGenerating, setIsGenerating] = useState(false);
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
 
-  const host = typeof window !== 'undefined' ? window.location.origin : 'https://tsctasker.vercel.app';
+  const host = typeof window !== 'undefined' ? window.location.origin : 'https://ttasker.vercel.app';
   const webhookUrl = `${host}/api/telegram/webhook`;
+  const whatsappWebhookUrl = `${host}/api/whatsapp/webhook`;
+  const whatsappVerifyToken = 'tsc_baccalaureate_whatsapp_2026';
   const setWebhookCurl = `https://api.telegram.org/bot8978477850:AAGzHRPqL-x2ftO-r_Nx-1dhtG6sxzC6ME4/setWebhook?url=${webhookUrl}`;
 
   const handleCopyCode = () => {
@@ -251,6 +256,114 @@ export default function SettingsPage() {
               </div>
               <div className="p-2 rounded-lg bg-black font-mono text-[11px] text-neutral-300 break-all select-all">
                 {webhookUrl}
+              </div>
+            </div>
+          </GlassCard>
+
+          {/* WhatsApp Bot Card */}
+          <GlassCard className="p-6 space-y-6">
+            <div className="flex items-start justify-between">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-emerald-500 text-black flex items-center justify-center font-bold shadow-md shadow-emerald-500/20">
+                  <MessageCircle className="w-5 h-5 text-white" />
+                </div>
+                <div>
+                  <h2 className="text-base font-bold text-white flex items-center gap-2">
+                    <span>بوت واتساب (TaskerBot WhatsApp)</span>
+                    <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+                      Cloud API
+                    </span>
+                  </h2>
+                  <p className="text-xs text-neutral-400 mt-0.5">
+                    {language === 'ar'
+                      ? 'استقبل وحول رسائل جروبات المدرسة إلى البوت لتسجيل الواجبات والحصص والامتحانات تلقائياً.'
+                      : 'Forward school-group messages to automatically extract homework, exams, and lesson changes.'}
+                  </p>
+                </div>
+              </div>
+
+              <div
+                className={`px-2.5 py-1 rounded-full text-[11px] font-bold ${
+                  telegramLinked
+                    ? 'bg-emerald-950 text-emerald-300 border border-emerald-800'
+                    : 'bg-[#141414] text-neutral-400 border border-white/10'
+                }`}
+              >
+                {telegramLinked
+                  ? (language === 'ar' ? 'حسابك مربوط' : 'Account Linked')
+                  : (language === 'ar' ? 'جاهز للربط' : 'Ready to Link')}
+              </div>
+            </div>
+
+            {/* How to link WhatsApp */}
+            <div className="p-4 rounded-xl bg-[#111111] border border-white/10 space-y-3">
+              <span className="text-xs font-bold text-white block">
+                {language === 'ar' ? 'خطوات ربط حساب الواتساب:' : 'How to Link Your WhatsApp Account:'}
+              </span>
+
+              <ol className="space-y-2 text-xs text-neutral-300 list-decimal list-inside pl-1">
+                <li>
+                  {language === 'ar' ? (
+                    <>استخدم كود الربط الخاص بك: <code className="px-2 py-0.5 rounded bg-white/10 font-mono font-bold text-white">{telegramCode || 'اضغط توليد رمز في كارت تيليجرام أعلاه'}</code></>
+                  ) : (
+                    <>Use your 6-digit sync code: <code className="px-2 py-0.5 rounded bg-white/10 font-mono font-bold text-white">{telegramCode || 'Click Generate Code above'}</code></>
+                  )}
+                </li>
+                <li>
+                  {language === 'ar' ? (
+                    <>أرسل رسالة واتساب للرقم المخصص للبوت نصها: <code className="px-2 py-0.5 rounded bg-white/10 font-mono font-bold text-emerald-300">start {telegramCode || 'CODE'}</code></>
+                  ) : (
+                    <>Send a WhatsApp message: <code className="px-2 py-0.5 rounded bg-white/10 font-mono font-bold text-emerald-300">start {telegramCode || 'CODE'}</code></>
+                  )}
+                </li>
+                <li>
+                  {language === 'ar'
+                    ? 'بعدها حوّل أي رسالة من جروب المدرسة للرقم، والذكاء الاصطناعي هيصفي الرغي ويسجل المفيد فوراً!'
+                    : 'Forward any message from your school WhatsApp group to automatically log tasks!'}
+                </li>
+              </ol>
+            </div>
+
+            {/* Webhook & Meta Setup details */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div className="p-3 rounded-xl bg-[#111111] border border-white/10 space-y-1.5">
+                <div className="flex items-center justify-between">
+                  <span className="text-[11px] font-bold text-neutral-300">WhatsApp Webhook URL</span>
+                  <button
+                    onClick={() => {
+                      navigator.clipboard.writeText(whatsappWebhookUrl);
+                      setCopiedWhatsAppWebhook(true);
+                      setTimeout(() => setCopiedWhatsAppWebhook(false), 2000);
+                    }}
+                    className="text-[10px] text-neutral-400 hover:text-white flex items-center gap-1 cursor-pointer"
+                  >
+                    {copiedWhatsAppWebhook ? <Check className="w-3 h-3 text-emerald-400" /> : <Copy className="w-3 h-3" />}
+                    <span>{copiedWhatsAppWebhook ? (language === 'ar' ? 'تم النسخ' : 'Copied') : (language === 'ar' ? 'نسخ' : 'Copy')}</span>
+                  </button>
+                </div>
+                <div className="p-2 rounded-lg bg-black font-mono text-[10px] text-neutral-300 break-all select-all">
+                  {whatsappWebhookUrl}
+                </div>
+              </div>
+
+              <div className="p-3 rounded-xl bg-[#111111] border border-white/10 space-y-1.5">
+                <div className="flex items-center justify-between">
+                  <span className="text-[11px] font-bold text-neutral-300">Verify Token</span>
+                  <button
+                    onClick={() => {
+                      navigator.clipboard.writeText(whatsappVerifyToken);
+                      setCopiedVerifyToken(true);
+                      setTimeout(() => setCopiedVerifyToken(false), 2000);
+                    }}
+                    className="text-[10px] text-neutral-400 hover:text-white flex items-center gap-1 cursor-pointer"
+                  >
+                    {copiedVerifyToken ? <Check className="w-3 h-3 text-emerald-400" /> : <Copy className="w-3 h-3" />}
+                    <span>{copiedVerifyToken ? (language === 'ar' ? 'تم النسخ' : 'Copied') : (language === 'ar' ? 'نسخ' : 'Copy')}</span>
+                  </button>
+                </div>
+                <div className="p-2 rounded-lg bg-black font-mono text-[10px] text-neutral-300 break-all select-all">
+                  {whatsappVerifyToken}
+                </div>
               </div>
             </div>
           </GlassCard>
