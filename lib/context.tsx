@@ -686,6 +686,67 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     }
     setAssignments(updatedAssignments);
 
+    // 4. Generate TaskerBot / TSC AI Reminder Message for Ismail
+    const homeworkReminders = tasks
+      .map((t) => `• واجب ${t.subject}: تسليمه ${t.calculatedDueDate || 'قبل الحصة الجاية'}${t.notes ? ` (${t.notes})` : ''}`)
+      .slice(0, 5);
+
+    const studyReminders = lessons
+      .map((l) => `• حصة ${l.subject}: يوم ${(l.days || []).join(' و ')} الساعة ${l.startTime || 'ميعاد الدرس'}`)
+      .slice(0, 5);
+
+    let reminderText = `حبيبي يا إسماعيل يا بطل! أنا معاك ومصحصحلك جداً أهو. 👋\n\n` +
+      `جدولك نزل واتظبط تمام في السيستم يا بشمهندس! بما إننا في مسار الهندسة والحاسبات وهدفنا الـ 99% إن شاء الله، فإحنا هدفنا فوق وحلمك قريب جداً، بس محتاجين نلعبها صح ونكون دايماً سابقين بأقوى أداء! 🎯🚀\n\n`;
+
+    if (homeworkReminders.length > 0) {
+      reminderText += `خد بالك بقى من الواجبات والمذاكرة اللي رتبناهالك:\n${homeworkReminders.join('\n')}\n\n`;
+    }
+
+    if (studyReminders.length > 0) {
+      reminderText += `ومواعيد الحصص:\n${studyReminders.join('\n')}\n\n`;
+    }
+
+    reminderText += `تحب نعمل إيه النهاردة؟ تشرحلي حاجة واقفة معاك في الرياضة أو الفيزياء أو الحاسب ونظبطها، ولا تبعتلي مسألة نحلها سوا؟ سماعتي معاك يا حطاب، قول لي حابب نبدأ بإيه! 😎`;
+
+    const reminderMsg: ChatMessage = {
+      id: `ai-${Date.now()}`,
+      user_id: user?.id || 'temp',
+      source: 'web',
+      role: 'assistant',
+      content: reminderText,
+      created_at: new Date().toISOString(),
+    };
+    setChatMessages((prev) => [...prev, reminderMsg]);
+
+    if (supabase && user) {
+      await supabase.from('chat_messages').insert({
+        user_id: user.id,
+        source: 'web',
+        role: 'assistant',
+        content: reminderText,
+      });
+
+      await supabase.from('ai_activity_logs').insert({
+        user_id: user.id,
+        action_type: 'DAILY_PLAN',
+        title: 'تنبيه الواجبات والمذاكرة من TaskerBot',
+        description: `تم جدولة ${importedLessons} حصة و ${importedTasks} واجب في السيستم.`,
+        source: 'web_importer',
+      });
+    }
+
+    setAiActivities((prev) => [
+      {
+        id: `act-${Date.now()}`,
+        action_type: 'DAILY_PLAN',
+        title: 'تنبيه الواجبات والمذاكرة من TaskerBot',
+        description: `تم جدولة ${importedLessons} حصة و ${importedTasks} واجب في السيستم.`,
+        source: 'web_importer',
+        created_at: new Date().toISOString(),
+      },
+      ...prev,
+    ]);
+
     return { importedLessons, importedTasks, updatedCount };
   };
 

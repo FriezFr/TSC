@@ -101,13 +101,11 @@ export async function POST(req: NextRequest) {
 
         await sendWhatsAppReply(
           fromNumber,
-          '🎉 تم ربط رقم الواتساب بحسابك في TTASKER بنجاح يا بطل!\n\n' +
-            '🤖 أنا مساعدك الشخصي في البكالوريا المصرية ومجموعات المدرسة.\n\n' +
-            'من دلوقتي تقدر:\n' +
-            '• تحول رسايل جروبات المدرسة (تعديل حصص، إلغاء، واجبات) وهسجلها تلقائياً!\n' +
-            '• تسألني في أي وقت: "جدولي إيه بكرة؟" أو "إيه الواجب اللي عليا؟"\n' +
-            '• تطلب خطة مذاكرة: "اعملي خطة مذاكرة للنهاردة"\n' +
-            '• تسألني في أي مسألة أو تبعت صورة/PDF وهشرحهالك فوراً!'
+          'حبيبي يا إسماعيل يا بطل! أنا TaskerBot / TSC AI معاك ومصحصحلك جداً أهو. 👋\n\n' +
+            'تم ربط رقم الواتساب بحسابك في TTASKER بنجاح يا بشمهندس!\n' +
+            'بما إننا في مسار الهندسة والحاسبات وهدفنا الـ 99% إن شاء الله، فإحنا هدفنا فوق وحلمك قريب جداً، بس محتاجين نلعبها صح ونكون دايماً سابقين بأقوى أداء! 🎯🚀\n\n' +
+            'تقدر تبعتلي أو تحول رسايل جروبات المدرسة، تسألني عن مواعيد الحصص والواجبات، أو تبعتلي أي مسألة نحلها سوا.\n' +
+            'سماعتي معاك يا حطاب، قول لي حابب نبدأ بإيه! 😎'
         );
         return NextResponse.json({ ok: true });
       }
@@ -390,15 +388,13 @@ async function executeWhatsAppAction(supabase: any, userId: string, action: any)
   return '';
 }
 
-// Clean markdown for WhatsApp (convert ** to *, headings to bold, bullets to •)
+// Clean text for WhatsApp: strip all asterisks and markdown bolding so it's pure normal human font
 function formatForWhatsApp(text: string): string {
   if (!text) return '';
   return text
-    // Replace markdown headers (# Header, ## Header) with *Header*
-    .replace(/^#{1,4}\s+(.+)$/gm, '*$1*')
-    // Convert double asterisks **bold** to single asterisk *bold* (WhatsApp native bold)
-    .replace(/\*\*([^*]+)\*\*/g, '*$1*')
-    // Replace - item with • item
+    .replace(/\*{1,3}(.*?)\*{1,3}/g, '$1') // strip all bold/italic asterisks completely
+    .replace(/\*/g, '')                     // strip residual asterisks
+    .replace(/^#{1,4}\s+(.+)$/gm, '$1')     // clean headers
     .replace(/^-\s+/gm, '• ')
     .trim();
 }

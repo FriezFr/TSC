@@ -205,8 +205,8 @@ export const translations: Record<Language, Translations> = {
     answerLabel: 'Answer',
 
     // Chat & Telegram Sync
-    chatTitle: 'AI Study Assistant & Telegram Chat',
-    chatSubtitle: 'Real-time conversation logs synced between Telegram and your dashboard.',
+    chatTitle: 'TaskerBot / TSC AI',
+    chatSubtitle: 'Your personal AI study partner & copilot, synced in real-time between Telegram, WhatsApp, and your dashboard.',
     telegramSyncBadge: 'Telegram Sync Active',
     telegramConnected: 'Connected to Telegram (@TSCTaskerBot)',
     telegramNotConnected: 'Not linked to Telegram. Go to Settings to link.',
@@ -360,8 +360,8 @@ export const translations: Record<Language, Translations> = {
     answerLabel: 'الإجابة النموذجية',
 
     // Chat & Telegram Sync
-    chatTitle: 'المساعد الذكي وسجل محادثات تيليجرام',
-    chatSubtitle: 'سجل محادثاتك مع المساعد الأكاديمي متزامن بالكامل بين تيليجرام ولوحة التحكم.',
+    chatTitle: 'TaskerBot / TSC AI',
+    chatSubtitle: 'مساعدك وصاحبك الدراسي الذكي، متزامن لحظياً مع تيليجرام وواتساب ولوحة التحكم.',
     telegramSyncBadge: 'مزامنة تيليجرام نشطة',
     telegramConnected: 'متصل مع بوت تيليجرام (@TSCTaskerBot)',
     telegramNotConnected: 'حسابك غير مربوط بتيليجرام بعد. توجه إلى الإعدادات للربط.',

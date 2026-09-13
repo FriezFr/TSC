@@ -17,7 +17,10 @@ import {
   Edit2,
   Check,
   Zap,
+  Bot,
+  MessageSquare,
 } from 'lucide-react';
+import Link from 'next/link';
 import confetti from 'canvas-confetti';
 import { ParsedLessonSlot, ParsedScheduleTask, Priority } from '@/lib/types';
 
@@ -56,7 +59,7 @@ export default function ScheduleImportModal({
   const [clarifications, setClarifications] = useState<string[]>([]);
   const [lessons, setLessons] = useState<ParsedLessonSlot[]>([]);
   const [tasks, setTasks] = useState<ParsedScheduleTask[]>([]);
-  const [step, setStep] = useState<'input' | 'preview'>('input');
+  const [step, setStep] = useState<'input' | 'preview' | 'reminder'>('input');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [importResult, setImportResult] = useState<{
     lessons: number;
@@ -162,10 +165,8 @@ export default function ScheduleImportModal({
 
       if (onSuccess) onSuccess();
 
-      // Auto close after 1.8 seconds so the user can see their success
-      setTimeout(() => {
-        handleClose();
-      }, 1800);
+      // Switch to TaskerBot reminder view so Ismail gets immediate feedback
+      setStep('reminder');
     } catch (err: any) {
       console.error('Failed to import to TTASKER:', err);
       setErrorMsg(isArabic ? 'حدث خطأ أثناء الحفظ' : 'Failed to save items to TTASKER');
@@ -531,6 +532,95 @@ export default function ScheduleImportModal({
                   )}
                 </button>
               </div>
+            </div>
+          </div>
+        )}
+
+        {step === 'reminder' && (
+          /* Step 3: TaskerBot / TSC AI Human Study & Homework Reminder */
+          <div className="space-y-4 py-2 animate-in fade-in duration-300">
+            {/* Bot Header Card */}
+            <div className="p-4 rounded-2xl bg-gradient-to-br from-blue-500/10 via-indigo-500/10 to-purple-500/10 border border-blue-500/25 space-y-3">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2.5">
+                  <div className="w-8 h-8 rounded-xl bg-blue-600 flex items-center justify-center text-white shadow-md shadow-blue-500/30">
+                    <Bot className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <h3 className="text-xs font-bold text-white flex items-center gap-1.5">
+                      <span>TaskerBot / TSC AI</span>
+                      <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-emerald-500/20 text-emerald-300 font-mono">
+                        متصل ومصحصح
+                      </span>
+                    </h3>
+                    <p className="text-[11px] text-neutral-400">مساعدك الدراسي الذكي في مسار الهندسة والحاسبات</p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Bot Speech Bubble (Pure Normal Human Font - ZERO Asterisks) */}
+              <div className="p-3.5 rounded-xl bg-black/40 border border-white/5 text-xs text-neutral-200 leading-relaxed space-y-2.5">
+                <p>
+                  حبيبي يا إسماعيل يا بطل! أنا معاك ومصحصحلك جداً أهو. 👋
+                </p>
+                <p>
+                  جدولك نزل واتظبط تمام في السيستم يا بشمهندس! بما إننا في مسار الهندسة والحاسبات وهدفنا الـ 99% إن شاء الله، فإحنا هدفنا فوق وحلمك قريب جداً، بس محتاجين نلعبها صح ونكون دايماً سابقين بأقوى أداء! 🎯🚀
+                </p>
+
+                {/* Scheduled Homework Summary */}
+                {tasks.length > 0 && (
+                  <div className="p-2.5 rounded-lg bg-white/5 border border-white/5 space-y-1">
+                    <span className="text-[11px] text-blue-300 font-medium block">
+                      خد بالك بقى من الواجبات والمذاكرة اللي رتبناهالك:
+                    </span>
+                    {tasks.slice(0, 4).map((t, idx) => (
+                      <div key={idx} className="text-[11px] text-neutral-300 flex items-center gap-1.5">
+                        <span className="text-blue-400 font-bold">•</span>
+                        <span>واجب {t.subject}: تسليمه {t.calculatedDueDate || 'قبل الحصة الجاية'}{t.notes ? ` (${t.notes})` : ''}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {/* Scheduled Lessons Summary */}
+                {lessons.length > 0 && (
+                  <div className="p-2.5 rounded-lg bg-white/5 border border-white/5 space-y-1">
+                    <span className="text-[11px] text-purple-300 font-medium block">
+                      ومواعيد الحصص الأساسية:
+                    </span>
+                    {lessons.slice(0, 4).map((l, idx) => (
+                      <div key={idx} className="text-[11px] text-neutral-300 flex items-center gap-1.5">
+                        <span className="text-purple-400 font-bold">•</span>
+                        <span>حصة {l.subject}: يوم {(l.days || []).join(' و ')} الساعة {l.startTime || 'ميعاد الدرس'}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                <p className="text-neutral-300">
+                  تحب نعمل إيه النهاردة؟ تشرحلي حاجة واقفة معاك في الرياضة أو الفيزياء أو الحاسب ونظبطها، ولا تبعتلي صورة سؤال أو مسألة رمة نحلها سوا؟ سماعتي معاك يا حطاب، قول لي حابب نبدأ بإيه! 😎
+                </p>
+              </div>
+            </div>
+
+            {/* Actions */}
+            <div className="flex items-center justify-between gap-2 pt-2">
+              <Link
+                href="/dashboard/chat"
+                onClick={handleClose}
+                className="px-4 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer shadow-md shadow-blue-500/25"
+              >
+                <MessageSquare className="w-3.5 h-3.5" />
+                <span>فتح المحادثة مع TaskerBot</span>
+              </Link>
+
+              <button
+                type="button"
+                onClick={handleClose}
+                className="px-5 py-2.5 rounded-xl glass-button-secondary text-xs font-medium cursor-pointer"
+              >
+                <span>تم، تسلم يا بطل ✓</span>
+              </button>
             </div>
           </div>
         )}

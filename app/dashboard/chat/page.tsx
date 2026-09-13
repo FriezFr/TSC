@@ -20,14 +20,17 @@ import {
 } from 'lucide-react';
 import Link from 'next/link';
 
-// Component to clean up LaTeX math and markdown symbols for natural display
+// Component to clean up LaTeX math and markdown symbols for natural human text display (no asterisks)
 function FormattedMessage({ content }: { content: string }) {
-  // Clean raw LaTeX dollar signs and brackets
+  // Clean raw LaTeX dollar signs, brackets, and all asterisks (*, **, ***)
   const cleanContent = content
     .replace(/\$\$([\s\S]*?)\$\$/g, '$1')
     .replace(/\$([^\$\n]+)\$/g, '$1')
     .replace(/\\\(([\s\S]*?)\\\)/g, '$1')
     .replace(/\\\[([\s\S]*?)\\\]/g, '$1')
+    .replace(/\*{1,3}(.*?)\*{1,3}/g, '$1') // strip bold/italic asterisks
+    .replace(/\*/g, '')                     // strip residual asterisks
+    .replace(/^#+\s*/gm, '')                // strip markdown headers
     .replace(/\\times/g, '×')
     .replace(/\\div/g, '÷')
     .replace(/\\le/g, '≤')
@@ -36,41 +39,25 @@ function FormattedMessage({ content }: { content: string }) {
   const lines = cleanContent.split('\n');
 
   return (
-    <div className="space-y-1 leading-relaxed text-xs" dir="auto">
+    <div className="space-y-1.5 leading-relaxed text-xs text-neutral-200 font-normal" dir="auto">
       {lines.map((line, idx) => {
         const trimmed = line.trim();
         if (!trimmed) {
-          return <div key={idx} className="h-1" />;
+          return <div key={idx} className="h-1.5" />;
         }
-
-        // Parse bolding **text**
-        const parts = line.split(/(\*\*.*?\*\*)/g);
-
-        const renderedLine = parts.map((part, pIdx) => {
-          if (part.startsWith('**') && part.endsWith('**') && part.length > 4) {
-            const boldText = part.slice(2, -2);
-            return (
-              <strong key={pIdx} className="font-bold text-white tracking-wide">
-                {boldText}
-              </strong>
-            );
-          }
-          // Remove stray asterisks from words
-          const cleanPart = part.replace(/(^|\s)\*([^\*]+)\*(\s|$)/g, '$1$2$3');
-          return <span key={pIdx}>{cleanPart}</span>;
-        });
 
         // Bullet points
         if (trimmed.startsWith('•') || trimmed.startsWith('- ') || /^\d+\.\s/.test(trimmed)) {
+          const textWithoutBullet = trimmed.replace(/^[•\-\d\.]+\s*/, '');
           return (
-            <div key={idx} className="flex items-start gap-1.5 my-0.5">
+            <div key={idx} className="flex items-start gap-2 my-0.5">
               <span className="shrink-0 text-blue-400 font-bold">•</span>
-              <div className="flex-1">{renderedLine}</div>
+              <div className="flex-1 text-neutral-200">{textWithoutBullet}</div>
             </div>
           );
         }
 
-        return <div key={idx}>{renderedLine}</div>;
+        return <div key={idx} className="text-neutral-200">{trimmed}</div>;
       })}
     </div>
   );

@@ -70,12 +70,13 @@ async function sendChatAction(chatId: number, action: 'typing' | 'upload_documen
   }
 }
 
-// Clean markdown headers for Telegram plain text display
+// Clean text for Telegram: strip all asterisks and markdown headers so text is pure, normal human font
 function formatForTelegram(text: string): string {
   if (!text) return '';
   return text
-    // Replace markdown headers with clean bullet/bold lines
-    .replace(/^#{1,4}\s+(.+)$/gm, '• $1')
+    .replace(/\*{1,3}(.*?)\*{1,3}/g, '$1') // strip bold/italic asterisks completely
+    .replace(/\*/g, '')                     // strip residual asterisks
+    .replace(/^#{1,4}\s+(.+)$/gm, '• $1')   // clean markdown headers
     .trim();
 }
 
@@ -231,17 +232,14 @@ export async function POST(req: NextRequest) {
 
         await sendTelegramReply(
           chatId,
-          '🎉 Successfully linked to your Baccalaureate Dashboard (البكالوريا المصرية)!\n\n' +
-            '🤖 I am your personal AI Study Assistant & Tutor!\n\n' +
-            'Here is what you can do anytime:\n' +
-            '📚 Send any PDF or lesson (e.g. "Ch 1 L 1_2027.pdf") to get summaries & key exam laws!\n' +
-            '📸 Send photos of homework or exam questions to get step-by-step solutions!\n' +
-            '💡 Ask me any academic question in Arabic or English!\n' +
-            '✅ Log homework: "واجب فيزياء صفحة 30 الإثنين"\n' +
-            '📅 Log exams: "امتحان كيمياء 20 مارس"\n' +
-            '📊 Log grades: "جبت 56 من 60 في العربي"\n' +
-            '⚡ Log habits: "نمت 7.5 ساعات"\n\n' +
-            'Go ahead, send me anything now!'
+          'حبيبي يا إسماعيل يا بطل! أنا TaskerBot / TSC AI معاك ومصحصحلك جداً أهو. 👋\n\n' +
+            'قولي بقى يا بشمهندس، أخبار المذاكرة والتحضير إيه؟ بما إننا في مسار الهندسة والحاسبات وهدفنا الـ 99% إن شاء الله، فإحنا هدفنا فوق وحلمك قريب جداً، بس محتاجين نلعبها صح ونكون دايماً سابقين بأقوى أداء! 🎯🚀\n\n' +
+            'تحب نعمل إيه النهاردة؟\n' +
+            '- تشرحلي حاجة واقفة معاك في الرياضة أو الفيزياء أو الحاسب ونظبطها؟\n' +
+            '- تبعتلي صورة سؤال أو مسألة رمة نحلها سوا خطوة بخطوة؟\n' +
+            '- تبعتلي ملف PDF لدرس أو ملخص نقراه ونطلّع أفكار الامتحانات منه؟\n' +
+            '- ولا حابب نظبط جدول مذاكرة ونرتب أهداف الأسبوع دا؟\n\n' +
+            'سماعتي معاك يا حطاب، قول لي حابب نبدأ بإيه! 😎'
         );
         return NextResponse.json({ ok: true });
       }
