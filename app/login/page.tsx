@@ -18,11 +18,14 @@ import {
   ShieldCheck,
   GraduationCap,
   Globe,
+  Bot,
+  Sparkles,
+  KeyRound,
 } from 'lucide-react';
 import { useApp } from '@/lib/context';
 import { BaccalaureateTrack, BACCALAUREATE_TRACKS } from '@/lib/types';
 
-type AuthMode = 'signin' | 'signup';
+type AuthMode = 'signin' | 'signup' | 'forgot';
 
 export default function AuthPage() {
   const router = useRouter();
@@ -79,7 +82,32 @@ export default function AuthPage() {
     setLoading(true);
 
     try {
-      if (mode === 'signup') {
+      if (mode === 'forgot') {
+        if (!email.trim()) {
+          throw new Error(
+            language === 'ar'
+              ? 'يرجى إدخال البريد الإلكتروني.'
+              : 'Please enter your email address.'
+          );
+        }
+
+        const redirectTo =
+          typeof window !== 'undefined'
+            ? `${window.location.origin}/dashboard/settings`
+            : undefined;
+
+        const { error } = await supabase.auth.resetPasswordForEmail(email.trim().toLowerCase(), {
+          redirectTo,
+        });
+
+        if (error) throw error;
+
+        setSuccessMsg(
+          language === 'ar'
+            ? 'تم إرسال رابط إعادة تعيين كلمة المرور إلى بريدك الإلكتروني بنجاح! تفقد بريدك (وصندوق الرسائل غير المرغوب فيها).'
+            : 'Password reset link sent to your email successfully! Please check your inbox and spam folder.'
+        );
+      } else if (mode === 'signup') {
         // Client-side validations
         if (password.length < 6) {
           throw new Error(
@@ -199,51 +227,73 @@ export default function AuthPage() {
         {/* Brand & Badge Header */}
         <div className="text-center mb-6">
           <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-[#111111] border border-white/10 text-xs font-mono tracking-wider text-neutral-300 mb-3">
-            <GraduationCap className="w-4 h-4 text-white" />
-            <span className="font-bold">
-              {language === 'ar'
-                ? 'البكالوريا المصرية • BACCALAUREATE'
-                : 'EGYPTIAN BACCALAUREATE • SYSTEM'}
+            <Bot className="w-4 h-4 text-white" />
+            <span className="font-bold tracking-wider">
+              TASKERBOT / TSC AI
             </span>
           </div>
           <h1 className="text-3xl sm:text-4xl font-black tracking-tight text-white uppercase">
-            {mode === 'signin' ? t('signIn') : t('signUp')}
+            {mode === 'forgot'
+              ? t('forgotPassword')
+              : mode === 'signin'
+              ? t('signIn')
+              : t('signUp')}
           </h1>
           <p className="text-xs text-neutral-400 mt-1.5 max-w-md mx-auto">
-            {mode === 'signin' ? t('signInDesc') : t('signUpDesc')}
+            {mode === 'forgot'
+              ? t('forgotPasswordDesc')
+              : mode === 'signin'
+              ? t('signInDesc')
+              : t('signUpDesc')}
           </p>
         </div>
 
         {/* OLED Stealth Black Authentication Card */}
         <div className="bg-[#0a0a0a] rounded-2xl p-6 sm:p-8 border border-white/10 shadow-2xl backdrop-blur-xl">
-          {/* Segmented Dual Tabs */}
-          <div className="grid grid-cols-2 p-1 rounded-xl bg-[#141414] border border-white/10 mb-6">
-            <button
-              type="button"
-              onClick={() => handleModeSwitch('signin')}
-              className={`py-3 text-xs font-black uppercase tracking-wider rounded-lg transition-all flex items-center justify-center gap-2 cursor-pointer ${
-                mode === 'signin'
-                  ? 'bg-white text-black shadow-md'
-                  : 'text-neutral-400 hover:text-white'
-              }`}
-            >
-              <LogIn className="w-4 h-4" />
-              <span>{t('signIn')}</span>
-            </button>
+          {/* Segmented Dual Tabs or Forgot Mode Back Header */}
+          {mode === 'forgot' ? (
+            <div className="flex items-center justify-between p-2 rounded-xl bg-[#141414] border border-white/10 mb-6">
+              <div className="flex items-center gap-2 text-xs font-bold text-neutral-300 px-3">
+                <KeyRound className="w-4 h-4 text-neutral-400" />
+                <span>{t('forgotPassword')}</span>
+              </div>
+              <button
+                type="button"
+                onClick={() => handleModeSwitch('signin')}
+                className="px-3.5 py-2 rounded-lg bg-white text-black text-xs font-black uppercase tracking-wider hover:bg-neutral-200 transition-colors flex items-center gap-1.5 cursor-pointer shadow-sm"
+              >
+                <span>{t('backToSignIn')}</span>
+              </button>
+            </div>
+          ) : (
+            <div className="grid grid-cols-2 p-1 rounded-xl bg-[#141414] border border-white/10 mb-6">
+              <button
+                type="button"
+                onClick={() => handleModeSwitch('signin')}
+                className={`py-3 text-xs font-black uppercase tracking-wider rounded-lg transition-all flex items-center justify-center gap-2 cursor-pointer ${
+                  mode === 'signin'
+                    ? 'bg-white text-black shadow-md'
+                    : 'text-neutral-400 hover:text-white'
+                }`}
+              >
+                <LogIn className="w-4 h-4" />
+                <span>{t('signIn')}</span>
+              </button>
 
-            <button
-              type="button"
-              onClick={() => handleModeSwitch('signup')}
-              className={`py-3 text-xs font-black uppercase tracking-wider rounded-lg transition-all flex items-center justify-center gap-2 cursor-pointer ${
-                mode === 'signup'
-                  ? 'bg-white text-black shadow-md'
-                  : 'text-neutral-400 hover:text-white'
-              }`}
-            >
-              <UserPlus className="w-4 h-4" />
-              <span>{t('signUp')}</span>
-            </button>
-          </div>
+              <button
+                type="button"
+                onClick={() => handleModeSwitch('signup')}
+                className={`py-3 text-xs font-black uppercase tracking-wider rounded-lg transition-all flex items-center justify-center gap-2 cursor-pointer ${
+                  mode === 'signup'
+                    ? 'bg-white text-black shadow-md'
+                    : 'text-neutral-400 hover:text-white'
+                }`}
+              >
+                <UserPlus className="w-4 h-4" />
+                <span>{t('signUp')}</span>
+              </button>
+            </div>
+          )}
 
           {/* Feedback Messages */}
           {errorMsg && (
@@ -360,31 +410,44 @@ export default function AuthPage() {
             </div>
 
             {/* Password */}
-            <div>
-              <label className="block text-xs font-semibold text-neutral-300 mb-1.5">
-                {t('passwordLabel')}
-              </label>
-              <div className="relative">
-                <Lock className="w-4 h-4 text-neutral-500 absolute left-3.5 top-1/2 -translate-y-1/2" />
-                <input
-                  type={showPassword ? 'text' : 'password'}
-                  required
-                  minLength={6}
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  placeholder="•••••••••"
-                  className="w-full glass-input pl-10 pr-10 py-2.5 rounded-xl text-sm"
-                />
-                <button
-                  type="button"
-                  onClick={() => setShowPassword(!showPassword)}
-                  className="absolute right-3.5 top-1/2 -translate-y-1/2 text-neutral-500 hover:text-white cursor-pointer"
-                  tabIndex={-1}
-                >
-                  {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                </button>
+            {mode !== 'forgot' && (
+              <div>
+                <div className="flex items-center justify-between mb-1.5">
+                  <label className="block text-xs font-semibold text-neutral-300">
+                    {t('passwordLabel')}
+                  </label>
+                  {mode === 'signin' && (
+                    <button
+                      type="button"
+                      onClick={() => handleModeSwitch('forgot')}
+                      className="text-[11px] font-medium text-neutral-400 hover:text-white transition-colors cursor-pointer"
+                    >
+                      {t('forgotPassword')}
+                    </button>
+                  )}
+                </div>
+                <div className="relative">
+                  <Lock className="w-4 h-4 text-neutral-500 absolute left-3.5 top-1/2 -translate-y-1/2" />
+                  <input
+                    type={showPassword ? 'text' : 'password'}
+                    required
+                    minLength={6}
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    placeholder="•••••••••"
+                    className="w-full glass-input pl-10 pr-10 py-2.5 rounded-xl text-sm"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword(!showPassword)}
+                    className="absolute right-3.5 top-1/2 -translate-y-1/2 text-neutral-500 hover:text-white cursor-pointer"
+                    tabIndex={-1}
+                  >
+                    {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                  </button>
+                </div>
               </div>
-            </div>
+            )}
 
             {/* Confirm Password (SIGN UP mode only) */}
             {mode === 'signup' && (
@@ -428,7 +491,13 @@ export default function AuthPage() {
                 </div>
               ) : (
                 <>
-                  <span>{mode === 'signin' ? t('signIn') : t('signUp')}</span>
+                  <span>
+                    {mode === 'forgot'
+                      ? t('resetPasswordBtn')
+                      : mode === 'signin'
+                      ? t('signIn')
+                      : t('signUp')}
+                  </span>
                   <ArrowRight className="w-4 h-4" />
                 </>
               )}
@@ -437,7 +506,18 @@ export default function AuthPage() {
 
           {/* Switch Link Prompt */}
           <div className="mt-6 pt-5 border-t border-white/10 text-center">
-            {mode === 'signin' ? (
+            {mode === 'forgot' ? (
+              <p className="text-xs text-neutral-400">
+                <button
+                  type="button"
+                  onClick={() => handleModeSwitch('signin')}
+                  className="text-white font-bold uppercase tracking-wider hover:underline cursor-pointer inline-flex items-center gap-1.5"
+                >
+                  <ArrowRight className="w-3.5 h-3.5 rotate-180" />
+                  <span>{t('backToSignIn')}</span>
+                </button>
+              </p>
+            ) : mode === 'signin' ? (
               <p className="text-xs text-neutral-400">
                 {t('noAccount')}{' '}
                 <button

@@ -3,8 +3,8 @@ import './globals.css';
 import { AppProvider } from '@/lib/context';
 
 export const metadata: Metadata = {
-  title: 'البكالوريا المصرية • Baccalaureate Dashboard',
-  description: 'Minimalist OLED black productivity dashboard for Egyptian Baccalaureate (البكالوريا المصرية) students.',
+  title: 'TaskerBot / TSC AI • AI School Assistant',
+  description: 'TaskerBot / TSC AI — Personal AI school assistant & study copilot for Egyptian Baccalaureate (البكالوريا المصرية) students.',
 };
 
 export const viewport: Viewport = {

@@ -110,6 +110,10 @@ export interface Translations {
   signInHere: string;
   signUpNow: string;
   processing: string;
+  forgotPassword: string;
+  forgotPasswordDesc: string;
+  resetPasswordBtn: string;
+  backToSignIn: string;
 
   // Today View
   welcomeBack: string;
@@ -159,9 +163,9 @@ export interface Translations {
 export const translations: Record<Language, Translations> = {
   en: {
     // Brand
-    brandName: 'Baccalaureate',
-    brandTagline: 'Egyptian Baccalaureate Dashboard',
-    systemName: 'Egyptian Baccalaureate System',
+    brandName: 'TaskerBot / TSC AI',
+    brandTagline: 'TaskerBot / TSC AI • Smart School Assistant',
+    systemName: 'TaskerBot / TSC AI System',
 
     // Navigation
     navToday: 'Today View',
@@ -257,8 +261,8 @@ export const translations: Record<Language, Translations> = {
     // Auth Page
     signIn: 'Sign In',
     signUp: 'Sign Up',
-    signInDesc: 'Enter your student credentials to access your Baccalaureate dashboard',
-    signUpDesc: 'Create your private student profile for the new Egyptian Baccalaureate system',
+    signInDesc: 'Enter your credentials to access TaskerBot / TSC AI',
+    signUpDesc: 'Create your private student profile for TaskerBot / TSC AI',
     emailLabel: 'Email Address',
     passwordLabel: 'Password',
     confirmPasswordLabel: 'Confirm Password',
@@ -267,6 +271,10 @@ export const translations: Record<Language, Translations> = {
     signInHere: 'Sign In Here',
     signUpNow: 'Sign Up Now',
     processing: 'Processing...',
+    forgotPassword: 'Forgot Password?',
+    forgotPasswordDesc: 'Enter your email address and we will send you a password reset link.',
+    resetPasswordBtn: 'Send Reset Link',
+    backToSignIn: 'Back to Sign In',
 
     // Today View
     welcomeBack: 'Welcome back',
@@ -314,9 +322,9 @@ export const translations: Record<Language, Translations> = {
   },
   ar: {
     // Brand
-    brandName: 'البكالوريا',
-    brandTagline: 'لوحة تحكم البكالوريا المصرية',
-    systemName: 'نظام البكالوريا المصرية الجديد',
+    brandName: 'TaskerBot / TSC AI',
+    brandTagline: 'TaskerBot / TSC AI • المساعد المدرسي الذكي',
+    systemName: 'منظومة TaskerBot / TSC AI الذكية',
 
     // Navigation
     navToday: 'نظرة اليوم',
@@ -412,8 +420,8 @@ export const translations: Record<Language, Translations> = {
     // Auth Page
     signIn: 'تسجيل الدخول',
     signUp: 'إنشاء حساب جديد',
-    signInDesc: 'أدخل بيانات الطالب للدخول إلى لوحة البكالوريا المصرية الخاصة بك',
-    signUpDesc: 'أنشئ ملفك الأكاديمي الخاص وفق نظام البكالوريا المصرية الجديد',
+    signInDesc: 'أدخل بياناتك للدخول إلى TaskerBot / TSC AI',
+    signUpDesc: 'أنشئ ملفك الأكاديمي الخاص في منظومة TaskerBot / TSC AI',
     emailLabel: 'البريد الإلكتروني',
     passwordLabel: 'كلمة المرور',
     confirmPasswordLabel: 'تأكيد كلمة المرور',
@@ -422,6 +430,10 @@ export const translations: Record<Language, Translations> = {
     signInHere: 'سجّل الدخول الآن',
     signUpNow: 'أنشئ حساباً جديداً',
     processing: 'جاري المعالجة...',
+    forgotPassword: 'نسيت كلمة المرور؟',
+    forgotPasswordDesc: 'أدخل بريدك الإلكتروني المسجل وسنرسل لك رابط استعادة وتعيين كلمة المرور.',
+    resetPasswordBtn: 'إرسال رابط الاستعادة',
+    backToSignIn: 'العودة لتسجيل الدخول',
 
     // Today View
     welcomeBack: 'مرحباً بك',
