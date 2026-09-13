@@ -34,6 +34,9 @@ export async function POST(req: NextRequest) {
     let fromNumber = '';
     let incomingText = '';
 
+    let mediaPart: { mimeType: string; data: string } | undefined = undefined;
+    let fileName: string | undefined = undefined;
+
     // Check if Meta Cloud API (JSON) or Twilio (x-www-form-urlencoded)
     if (contentType.includes('application/json')) {
       const body = await req.json();
@@ -50,6 +53,32 @@ export async function POST(req: NextRequest) {
 
       fromNumber = message.from; // e.g. "201012345678"
       incomingText = (message.text?.body || message.caption || '').trim();
+
+      // Handle PDF Documents, Images, Audio
+      if (message.type === 'document' && message.document) {
+        fileName = message.document.filename || 'document.pdf';
+        const docMedia = await downloadWhatsAppMedia(message.document.id);
+        if (docMedia) {
+          mediaPart = {
+            mimeType: message.document.mime_type || docMedia.mimeType,
+            data: docMedia.buffer.toString('base64'),
+          };
+          if (!incomingText) {
+            incomingText = `Please analyze and summarize this attached document: "${fileName}". Explain key concepts, definitions, and exam takeaways clearly.`;
+          }
+        }
+      } else if (message.type === 'image' && message.image) {
+        const imgMedia = await downloadWhatsAppMedia(message.image.id);
+        if (imgMedia) {
+          mediaPart = {
+            mimeType: message.image.mime_type || imgMedia.mimeType || 'image/jpeg',
+            data: imgMedia.buffer.toString('base64'),
+          };
+          if (!incomingText) {
+            incomingText = 'Please analyze and explain this problem or image.';
+          }
+        }
+      }
     } else {
       // Twilio WhatsApp form-data structure
       const formData = await req.formData();
@@ -57,7 +86,7 @@ export async function POST(req: NextRequest) {
       incomingText = (formData.get('Body') as string || '').trim();
     }
 
-    if (!fromNumber || !incomingText) {
+    if (!fromNumber || (!incomingText && !mediaPart)) {
       return NextResponse.json({ ok: true });
     }
 
@@ -105,12 +134,9 @@ export async function POST(req: NextRequest) {
 
         await sendWhatsAppReply(
           fromNumber,
-          'حبيبي يا إسماعيل يا بطل! أنا TaskerBot / TSC AI معاك ومصحصحلك جداً أهو. 👋\n\n' +
-            'تم ربط رقم الواتساب بحسابك في TaskerBot بنجاح يا بشمهندس! Your WhatsApp is now linked to TaskerBot!\n' +
-            'بما إننا في مسار الهندسة والحاسبات وهدفنا الـ 99% إن شاء الله، فإحنا هدفنا فوق وحلمك قريب جداً، بس محتاجين نلعبها صح ونكون دايماً سابقين بأقوى أداء! 🎯🚀\n\n' +
-            'تقدر تتكلم معايا بالعربي أو بالإنجليزية (You can talk to me in English or Arabic anytime!).\n' +
-            'ابعتلي مواعيد الحصص والواجبات، أو أي سؤال نحله سوا.\n' +
-            'سماعتي معاك يا حطاب، قول لي حابب نبدأ بإيه! 😎'
+          '👋 مرحباً بك يا إسماعيل!\n' +
+            'تم ربط رقم الواتساب بحسابك في TaskerBot بنجاح. Your WhatsApp is now connected to TaskerBot!\n\n' +
+            'You can talk to me in English or Arabic anytime. Send me your schedule, homework, questions, or forward school group PDFs and images whenever you need help.'
         );
         return NextResponse.json({ ok: true });
       }
@@ -178,6 +204,8 @@ export async function POST(req: NextRequest) {
     // 5. Process with Gemini
     const aiResponse = await processUserMessageWithAI({
       text: incomingText,
+      mediaPart,
+      fileName,
       languagePreference: isEnglish ? 'en' : 'ar',
       userProfile: profile,
       scheduleContext,
@@ -531,3 +559,32 @@ async function executeAction(supabase: any, userId: string, action: any) {
     console.error('Error executing dashboard action in WhatsApp webhook:', err);
   }
 }
+
+// Download WhatsApp Media (PDFs, Images, Audio) via Meta Graph API
+async function downloadWhatsAppMedia(mediaId: string): Promise<{ buffer: Buffer; mimeType: string } | null> {
+  const token = process.env.WHATSAPP_ACCESS_TOKEN;
+  if (!token || !mediaId) return null;
+  try {
+    const metaRes = await fetch(`https://graph.facebook.com/v20.0/${mediaId}`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    if (!metaRes.ok) return null;
+    const metaData = await metaRes.json();
+    const mediaUrl = metaData.url;
+    if (!mediaUrl) return null;
+
+    const fileRes = await fetch(mediaUrl, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    if (!fileRes.ok) return null;
+    const arrayBuffer = await fileRes.arrayBuffer();
+    return {
+      buffer: Buffer.from(arrayBuffer),
+      mimeType: metaData.mime_type || fileRes.headers.get('content-type') || 'application/octet-stream',
+    };
+  } catch (err) {
+    console.error('Error downloading WhatsApp media:', err);
+    return null;
+  }
+}
+
