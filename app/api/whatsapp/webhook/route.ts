@@ -420,34 +420,71 @@ function formatForWhatsApp(text: string): string {
     .trim();
 }
 
-// Send message back using Meta WhatsApp Cloud API
+// Send message back using Meta WhatsApp Cloud API or Twilio WhatsApp API
 async function sendWhatsAppReply(to: string, text: string) {
-  const accessToken = process.env.WHATSAPP_ACCESS_TOKEN;
-  const phoneNumberId = process.env.WHATSAPP_PHONE_NUMBER_ID;
   const formattedText = formatForWhatsApp(text);
 
-  if (!accessToken || !phoneNumberId) {
-    console.log(`[WhatsApp Mock Reply to ${to}]: ${formattedText}`);
-    return;
+  // Option 1: Meta WhatsApp Cloud API
+  const metaAccessToken = process.env.WHATSAPP_ACCESS_TOKEN;
+  const metaPhoneNumberId = process.env.WHATSAPP_PHONE_NUMBER_ID;
+
+  if (metaAccessToken && metaPhoneNumberId) {
+    try {
+      const res = await fetch(`https://graph.facebook.com/v20.0/${metaPhoneNumberId}/messages`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${metaAccessToken}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          messaging_product: 'whatsapp',
+          to: to.replace(/\D/g, ''),
+          type: 'text',
+          text: { body: formattedText },
+        }),
+      });
+      if (!res.ok) {
+        const errJson = await res.text();
+        console.error('Meta WhatsApp send error:', errJson);
+      }
+      return;
+    } catch (err) {
+      console.error('Failed to send WhatsApp message via Meta API:', err);
+    }
   }
 
-  try {
-    await fetch(`https://graph.facebook.com/v20.0/${phoneNumberId}/messages`, {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${accessToken}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        messaging_product: 'whatsapp',
-        to,
-        type: 'text',
-        text: { body: formattedText },
-      }),
-    });
-  } catch (err) {
-    console.error('Failed to send WhatsApp message via Meta API:', err);
+  // Option 2: Twilio WhatsApp API
+  const twilioSid = process.env.TWILIO_ACCOUNT_SID;
+  const twilioAuth = process.env.TWILIO_AUTH_TOKEN;
+  const twilioFrom = process.env.TWILIO_WHATSAPP_NUMBER || 'whatsapp:+14155238886';
+
+  if (twilioSid && twilioAuth) {
+    try {
+      const toFormatted = to.startsWith('whatsapp:') ? to : `whatsapp:+${to.replace(/\D/g, '')}`;
+      const params = new URLSearchParams();
+      params.append('From', twilioFrom);
+      params.append('To', toFormatted);
+      params.append('Body', formattedText);
+
+      const res = await fetch(`https://api.twilio.com/2010-04-01/Accounts/${twilioSid}/Messages.json`, {
+        method: 'POST',
+        headers: {
+          'Authorization': 'Basic ' + Buffer.from(`${twilioSid}:${twilioAuth}`).toString('base64'),
+          'Content-Type': 'application/x-www-form-urlencoded',
+        },
+        body: params.toString(),
+      });
+      if (!res.ok) {
+        const errJson = await res.text();
+        console.error('Twilio WhatsApp send error:', errJson);
+      }
+      return;
+    } catch (err) {
+      console.error('Failed to send WhatsApp message via Twilio API:', err);
+    }
   }
+
+  console.log(`[WhatsApp Local / Mock Reply to ${to}]: ${formattedText}`);
 }
 
 async function executeAction(supabase: any, userId: string, action: any) {
