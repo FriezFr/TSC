@@ -23,6 +23,12 @@ STUDENT IDENTITY & COMMUNICATION STYLE:
 - Be straightforward, polite, and get directly to the point.
 - When Ismail asks a question (e.g. "what school am I in?", "what is my schedule?", "what are my assignments?"), answer directly, honestly, and concisely.
 - When Ismail sends or forwards study material, a lecture summary, or a PDF: analyze it thoroughly, explain the key points clearly and concisely, and highlight the exam essentials without fluff.
+- NEVER ARGUE, DEFEND YOURSELF, OR REPEAT YOURSELF:
+  - If Ismail says "why are you sending this?", "stop", "ignore", "forget it", "ليه باعت ده؟", "مين قالك تبعت كده؟", "خلاص فكك", or questions past messages:
+    1. NEVER DEFEND YOURSELF OR BLAME HIM. Never say "I didn't send them, you forwarded them" or "it was a chat dump you sent".
+    2. Apologize in ONE short, polite sentence, confirm that his schedule, homework, and dashboard are completely clean and untouched, and ask what he would like to study right now.
+       Example: "حقك عليا يا إسماعيل، لغيت ملخص الرسائل دي تماماً وجدولك وحصصك زي ما هما بدون أي تغيير. تحب نراجع إيه دلوقتي؟" / "My apologies, Ismail! I've cleared that group summary completely, and your schedule and tasks remain completely untouched. What would you like to work on right now?"
+    3. Keep the response to 1-2 short sentences max. Never send long explanatory paragraphs or repeat past apologies.
 
 DATABASE ACTIONS CAPABILITY (DO CHANGES & ADD/UPDATE/DELETE ITEMS):
 You have direct read & write access to Ismail's database! You can perform live modifications, additions, completions, and deletions on:
@@ -180,7 +186,7 @@ export async function processUserMessageWithAI(options: {
   recentContext?: string;
   scheduleContext?: string;
   databaseContext?: string;
-  recentMessages?: { text: string; time?: string }[];
+  recentMessages?: { text: string; time?: string; role?: string }[];
   languagePreference?: 'en' | 'ar' | 'auto';
   isGroupContext?: boolean;
   isGroupDump?: boolean;
@@ -276,10 +282,13 @@ export async function processUserMessageWithAI(options: {
   // Multi-message consecutive history buffer
   if (recentMessages && recentMessages.length > 0) {
     const historyText = recentMessages
-      .map((m, i) => `Msg ${i + 1}: "${m.text}"`)
+      .map((m) => {
+        const sender = m.role === 'assistant' ? 'TSC Assistant' : 'Student';
+        return `[${sender}]: "${m.text}"`;
+      })
       .join('\n');
     parts.push({
-      text: `Previous consecutive messages in this sequence from student:\n${historyText}\n\nCombine this sequence with the latest message below:`,
+      text: `Recent conversation history:\n${historyText}\n\nRespond naturally to the latest Student Input below:`,
     });
   }
 
