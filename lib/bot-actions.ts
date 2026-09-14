@@ -1235,4 +1235,538 @@ export function isGroupChatDump(text: string = ''): boolean {
   return timestampSenderCount >= 2 || (hasGroupKeywords && lines.length >= 3);
 }
 
+/**
+ * 1. Autonomous Daily Morning Briefing Generator
+ * Gathers today's classes, imminent homework, upcoming exams, and 1 smart 45-min focus recommendation.
+ * Output is clean plain text with NO asterisks (*, **).
+ */
+export async function generateDailyMorningBriefing(
+  supabase: SupabaseClient | any,
+  userId: string,
+  isEnglish: boolean = false
+): Promise<string> {
+  const todayDate = new Date();
+  const todayStr = todayDate.toISOString().split('T')[0];
+  // 0: Sat, 1: Sun, 2: Mon, 3: Tue, 4: Wed, 5: Thu, 6: Fri
+  const todayDayIdx = (todayDate.getDay() + 1) % 7;
+
+  const dayNamesEn = ['Saturday', 'Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday'];
+  const dayNamesAr = ['السبت', 'الأحد', 'الإثنين', 'الثلاثاء', 'الأربعاء', 'الخميس', 'الجمعة'];
+  const dayName = isEnglish ? dayNamesEn[todayDayIdx] : dayNamesAr[todayDayIdx];
+
+  try {
+    const [profileRes, timetableRes, assignmentsRes, examsRes, memoryRes, mistakeRes] = await Promise.all([
+      supabase.from('profiles').select('full_name, study_division').eq('id', userId).maybeSingle(),
+      supabase
+        .from('timetable')
+        .select('*')
+        .eq('user_id', userId)
+        .eq('day_of_week', todayDayIdx)
+        .order('start_time', { ascending: true }),
+      supabase
+        .from('assignments')
+        .select('*')
+        .eq('user_id', userId)
+        .eq('is_completed', false)
+        .order('due_date', { ascending: true })
+        .limit(6),
+      supabase
+        .from('exams')
+        .select('*')
+        .eq('user_id', userId)
+        .gte('exam_date', todayStr)
+        .order('exam_date', { ascending: true })
+        .limit(3),
+      supabase
+        .from('academic_memories')
+        .select('*')
+        .eq('user_id', userId)
+        .eq('confidence_level', 'low')
+        .limit(1)
+        .maybeSingle(),
+      supabase
+        .from('mistake_bank')
+        .select('*')
+        .eq('user_id', userId)
+        .eq('is_mastered', false)
+        .order('times_repeated', { ascending: false })
+        .limit(1)
+        .maybeSingle(),
+    ]);
+
+    const firstName = profileRes.data?.full_name ? profileRes.data.full_name.split(' ')[0] : (isEnglish ? 'Student' : 'إسماعيل');
+    const classes = timetableRes.data || [];
+    const pendingAssignments = assignmentsRes.data || [];
+    const upcomingExams = examsRes.data || [];
+    const weakMemory = memoryRes.data;
+    const topMistake = mistakeRes.data;
+
+    // 1. Classes Section
+    let classesText = '';
+    if (classes.length === 0) {
+      classesText = isEnglish
+        ? '• No classes scheduled today — perfect opportunity for self-study and revision.'
+        : '• لا توجد حصص أو دروس مجدولة اليوم — فرصة ممتازة للمذاكرة الحرة والمراجعة.';
+    } else {
+      classesText = classes
+        .map((c: any) => {
+          const room = c.room_or_teacher ? ` (${c.room_or_teacher})` : '';
+          return `• ${c.start_time} - ${c.end_time}: ${c.subject}${room}`;
+        })
+        .join('\n');
+    }
+
+    // 2. Imminent Assignments
+    let assignmentsText = '';
+    if (pendingAssignments.length === 0) {
+      assignmentsText = isEnglish
+        ? '• All registered assignments are completed. Great job!'
+        : '• كل الواجبات المسجلة منجزة بالكامل، عاش يا بطل!';
+    } else {
+      assignmentsText = pendingAssignments
+        .map((a: any) => {
+          const dueTag = a.due_date === todayStr ? (isEnglish ? 'Due TODAY' : 'تسليمه اليوم') : `${isEnglish ? 'Due' : 'تسليم'}: ${a.due_date}`;
+          const priorityTag = a.priority === 'high' ? (isEnglish ? ' [High Priority]' : ' [أولوية قصوى]') : '';
+          return `• ${a.title} (${a.subject}) — ${dueTag}${priorityTag}`;
+        })
+        .join('\n');
+    }
+
+    // 3. Upcoming Exams
+    let examsText = '';
+    if (upcomingExams.length === 0) {
+      examsText = isEnglish
+        ? '• No upcoming exams currently scheduled on your dashboard.'
+        : '• لا توجد امتحانات قادمة مسجلة في لوحة التحكم حالياً.';
+    } else {
+      examsText = upcomingExams
+        .map((e: any) => {
+          const diffDays = Math.ceil(
+            (new Date(e.exam_date).getTime() - todayDate.getTime()) / (1000 * 60 * 60 * 24)
+          );
+          const daysText =
+            diffDays === 0
+              ? (isEnglish ? 'TODAY' : 'اليوم')
+              : diffDays === 1
+              ? (isEnglish ? 'Tomorrow' : 'غداً')
+              : `${isEnglish ? 'In' : 'باقي'} ${diffDays} ${isEnglish ? 'days' : 'أيام'}`;
+          return `• ${e.subject}: ${e.exam_date} (${daysText})${e.notes ? ` — ${e.notes}` : ''}`;
+        })
+        .join('\n');
+    }
+
+    // 4. Decisive 45-Min Focus Recommendation
+    let recommendationText = '';
+    if (upcomingExams.length > 0) {
+      const nearestExam = upcomingExams[0];
+      const diffDays = Math.ceil(
+        (new Date(nearestExam.exam_date).getTime() - todayDate.getTime()) / (1000 * 60 * 60 * 24)
+      );
+      if (diffDays <= 5) {
+        recommendationText = isEnglish
+          ? `Focus on ${nearestExam.subject} for 45 minutes today. Your exam is in ${diffDays} days, making proactive revision the top priority.`
+          : `ركز على مادة ${nearestExam.subject} لمدة 45 دقيقة اليوم. امتحانك بعد ${diffDays} أيام، والمراجعة المبكرة هتضمنلك تثبيت المنهج تماماً.`;
+      }
+    }
+
+    if (!recommendationText && pendingAssignments.length > 0) {
+      const topTask = pendingAssignments[0];
+      recommendationText = isEnglish
+        ? `Complete "${topTask.title}" (${topTask.subject}) for 45 minutes to clear your deadlines early.`
+        : `أنجز "${topTask.title}" (${topTask.subject}) في جلسة تركيز 45 دقيقة عشان تصفي واجباتك أول بأول.`;
+    }
+
+    if (!recommendationText && weakMemory) {
+      recommendationText = isEnglish
+        ? `Review "${weakMemory.topic}" in ${weakMemory.subject} for 45 minutes — this was previously logged in your AI Study Memory.`
+        : `راجع نقطة "${weakMemory.topic}" في ${weakMemory.subject} لمدة 45 دقيقة — النقطة دي متسجلة في ذاكرتك الدراسية وبتحتاج تثبيت.`;
+    }
+
+    if (!recommendationText && topMistake) {
+      recommendationText = isEnglish
+        ? `Tackle your Mistake Bank in ${topMistake.subject} for 45 minutes to master previous error patterns.`
+        : `راجع بنك أخطائك في ${topMistake.subject} لمدة 45 دقيقة لحل المسائل اللي وقفت معاك قبل كده.`;
+    }
+
+    if (!recommendationText) {
+      recommendationText = isEnglish
+        ? 'Start a 45-minute deep focus session reviewing your hardest subject this term.'
+        : 'ابدأ جلسة تركيز 45 دقيقة تراجع فيها أثقل مادة عندك في الترم عشان تسبق بخطوة.';
+    }
+
+    if (isEnglish) {
+      return (
+        `☀️ Good morning, ${firstName}! Here is your Daily Morning Briefing for ${dayName} (${todayStr}):\n\n` +
+        `📅 TODAY'S CLASSES & SCHEDULE:\n${classesText}\n\n` +
+        `📝 ASSIGNMENTS DUE SOON:\n${assignmentsText}\n\n` +
+        `🎯 UPCOMING EXAMS:\n${examsText}\n\n` +
+        `🧠 RECOMMENDED 45-MIN FOCUS ACTION:\n• ${recommendationText}\n\n` +
+        `💡 Send "start focus session" or tap [ 🧠 What to Study? ] anytime to begin!`
+      );
+    }
+
+    return (
+      `☀️ صباح الخير يا ${firstName}! إليك تقرير بداية اليوم وتفاصيل جدولك ليوم ${dayName} (${todayStr}):\n\n` +
+      `📅 جدول وحصص اليوم:\n${classesText}\n\n` +
+      `📝 الواجبات المطلوب تسليمها قريباً:\n${assignmentsText}\n\n` +
+      `🎯 الامتحانات القادمة والعد التنازلي:\n${examsText}\n\n` +
+      `🧠 قرار المذاكرة المقترح لليوم (جلسة 45 دقيقة):\n• ${recommendationText}\n\n` +
+      `💡 اكتبلي "ابدأ جلسة تركيز" أو اضغط على [ 🧠 أذاكر إيه؟ ] لما تحب تبدأ، ويومك موفق ومنجز!`
+    );
+  } catch (err) {
+    console.error('Error generating daily morning briefing:', err);
+    return isEnglish
+      ? '☀️ Good morning! Check your dashboard for today\'s classes and pending assignments: https://taskerbot.vercel.app/dashboard'
+      : '☀️ صباح الخير! تقدر تتابع حصصك وواجباتك لليوم مباشرة عبر لوحة التحكم: https://taskerbot.vercel.app/dashboard';
+  }
+}
+
+/**
+ * 2. AI Exam Readiness Score Engine
+ * Computes realistic readiness % per subject by synthesizing:
+ * - Exam proximity
+ * - Unmastered mistake bank items
+ * - Academic memory confidence levels
+ * - Past quiz & assignment grades
+ * Output is clean plain text with NO asterisks (*, **).
+ */
+export async function computeExamReadiness(
+  supabase: SupabaseClient | any,
+  userId: string,
+  isEnglish: boolean = false
+): Promise<string> {
+  const todayStr = new Date().toISOString().split('T')[0];
+
+  try {
+    const [examsRes, mistakesRes, memoriesRes, gradesRes, timetableRes] = await Promise.all([
+      supabase.from('exams').select('*').eq('user_id', userId).order('exam_date', { ascending: true }),
+      supabase.from('mistake_bank').select('*').eq('user_id', userId),
+      supabase.from('academic_memories').select('*').eq('user_id', userId),
+      supabase.from('grades').select('*').eq('user_id', userId).order('date', { ascending: false }),
+      supabase.from('timetable').select('subject').eq('user_id', userId),
+    ]);
+
+    const exams = examsRes.data || [];
+    const mistakes = mistakesRes.data || [];
+    const memories = memoriesRes.data || [];
+    const grades = gradesRes.data || [];
+    const timetable = timetableRes.data || [];
+
+    // Gather unique subjects from exams, timetable, and grades
+    const subjectsSet = new Set<string>();
+    for (const e of exams) if (e.subject) subjectsSet.add(e.subject.trim());
+    for (const t of timetable) if (t.subject) subjectsSet.add(t.subject.trim());
+    for (const g of grades) if (g.subject) subjectsSet.add(g.subject.trim());
+
+    if (subjectsSet.size === 0) {
+      subjectsSet.add('Mathematics');
+      subjectsSet.add('Physics');
+      subjectsSet.add('Chemistry');
+    }
+
+    const readinessList: {
+      subject: string;
+      score: number;
+      statusText: string;
+      daysLeft?: number;
+      examDate?: string;
+      unmasteredCount: number;
+      weakTopicsCount: number;
+      recommendation: string;
+    }[] = [];
+
+    for (const subject of Array.from(subjectsSet)) {
+      const subjectExams = exams.filter((e: any) => normalizeSubject(e.subject) === normalizeSubject(subject));
+      const subjectMistakes = mistakes.filter((m: any) => normalizeSubject(m.subject) === normalizeSubject(subject));
+      const subjectMemories = memories.filter((mem: any) => normalizeSubject(mem.subject) === normalizeSubject(subject));
+      const subjectGrades = grades.filter((g: any) => normalizeSubject(g.subject) === normalizeSubject(subject));
+
+      let baseScore = 75;
+
+      // Grade factor
+      if (subjectGrades.length > 0) {
+        let totalPct = 0;
+        let count = 0;
+        for (const g of subjectGrades) {
+          if (g.max_score && g.max_score > 0) {
+            totalPct += (g.score / g.max_score) * 100;
+            count++;
+          }
+        }
+        if (count > 0) {
+          const avgPct = totalPct / count;
+          baseScore = Math.round(baseScore * 0.5 + avgPct * 0.5);
+        }
+      }
+
+      // Mistake bank impact
+      const unmastered = subjectMistakes.filter((m: any) => !m.is_mastered);
+      const mastered = subjectMistakes.filter((m: any) => m.is_mastered);
+      baseScore -= Math.min(24, unmastered.length * 6);
+      baseScore += Math.min(9, mastered.length * 3);
+
+      // Academic memory impact
+      const lowConfidence = subjectMemories.filter((mem: any) => mem.confidence_level === 'low');
+      const highConfidence = subjectMemories.filter((mem: any) => mem.confidence_level === 'high');
+      baseScore -= Math.min(20, lowConfidence.length * 7);
+      baseScore += Math.min(10, highConfidence.length * 5);
+
+      // Clamp between 38% and 97%
+      const finalScore = Math.max(38, Math.min(97, baseScore));
+
+      // Nearest exam days
+      let daysLeft: number | undefined = undefined;
+      let examDate: string | undefined = undefined;
+      if (subjectExams.length > 0) {
+        const nextExam = subjectExams.find((e: any) => e.exam_date >= todayStr) || subjectExams[0];
+        examDate = nextExam.exam_date;
+        daysLeft = Math.ceil((new Date(nextExam.exam_date).getTime() - Date.now()) / (1000 * 60 * 60 * 24));
+      }
+
+      // Status indicator
+      let statusText = '';
+      if (finalScore >= 80) {
+        statusText = isEnglish ? '🟢 High Readiness' : '🟢 جاهز ومستعد بقوة';
+      } else if (finalScore >= 65) {
+        statusText = isEnglish ? '🟡 Moderate (Needs Polish)' : '🟡 متوسط (محتاج تثبيت ومراجعة)';
+      } else {
+        statusText = isEnglish ? '🔴 Needs Urgent Focus' : '🔴 محتاج تركيز عاجل';
+      }
+
+      // Actionable advice
+      let recommendation = '';
+      if (unmastered.length > 0) {
+        recommendation = isEnglish
+          ? `Resolve ${unmastered.length} unmastered items in Mistake Bank.`
+          : `حل وتصفير ${unmastered.length} أسئلة في بنك الأخطاء.`;
+      } else if (lowConfidence.length > 0) {
+        recommendation = isEnglish
+          ? `Deep revision for weak topic: "${lowConfidence[0].topic}".`
+          : `مراجعة مكثفة لنقطة الضعف: "${lowConfidence[0].topic}".`;
+      } else {
+        recommendation = isEnglish
+          ? 'Maintain consistency with periodic timed mock quizzes.'
+          : 'الحفاظ على المستوى بكويزات سريعة وتدريب بوقت محدد.';
+      }
+
+      readinessList.push({
+        subject,
+        score: finalScore,
+        statusText,
+        daysLeft,
+        examDate,
+        unmasteredCount: unmastered.length,
+        weakTopicsCount: lowConfidence.length,
+        recommendation,
+      });
+    }
+
+    // Sort: lowest score (most critical) first
+    readinessList.sort((a, b) => a.score - b.score);
+
+    const averageReadiness = Math.round(
+      readinessList.reduce((acc, curr) => acc + curr.score, 0) / readinessList.length
+    );
+
+    const reportLines = readinessList.map((item) => {
+      const examTag =
+        item.daysLeft !== undefined
+          ? ` (${isEnglish ? 'Exam in' : 'الامتحان بعد'} ${item.daysLeft} ${isEnglish ? 'days' : 'أيام'} - ${item.examDate})`
+          : '';
+      return (
+        `• ${item.subject}: ${item.score}% — ${item.statusText}${examTag}\n` +
+        `  💡 ${item.recommendation}`
+      );
+    });
+
+    if (isEnglish) {
+      return (
+        `🎯 AI EXAM READINESS SCORE ENGINE\n` +
+        `Overall Academic Readiness: ${averageReadiness}%\n\n` +
+        `SUBJECT-BY-SUBJECT READINESS BREAKDOWN:\n` +
+        `${reportLines.join('\n\n')}\n\n` +
+        `💡 Next Step: Tell me "Quiz me on my mistakes in ${readinessList[0]?.subject || 'Physics'}" or start a 45-min focus session to immediately boost your readiness!`
+      );
+    }
+
+    return (
+      `🎯 مقياس الاستعداد الذكي للامتحانات (Exam Readiness Engine):\n` +
+      `متوسط جاهزيتك الأكاديمية العامة: ${averageReadiness}%\n\n` +
+      `تفاصيل مستوى الاستعداد لكل مادة:\n` +
+      `${reportLines.join('\n\n')}\n\n` +
+      `💡 الخطوة التالية المقترحة: قولي "امتحني في بنك أخطاء ${readinessList[0]?.subject || 'الفيزياء'}" أو ابدأ جلسة تركيز لرفع درجتك فوراً!`
+    );
+  } catch (err) {
+    console.error('Error computing exam readiness:', err);
+    return isEnglish
+      ? '⚠️ Could not compute exam readiness at this moment. Please verify your dashboard data.'
+      : '⚠️ تعذر حساب درجة الاستعداد للامتحانات حالياً. تأكد من تسجيل موادك في لوحة التحكم.';
+  }
+}
+
+/**
+ * 3. 1-Click Weekly Study & Parent Progress Report Generator
+ * Aggregates:
+ * - Study sessions & Pomodoro focus hours
+ * - Assignments completed vs pending
+ * - Mistake Bank mastery count
+ * - Recent quiz/exam grades
+ * - Professional, calm tone suitable for student and parents.
+ * Output is clean plain text with NO asterisks (*, **).
+ */
+export async function generateWeeklyProgressReport(
+  supabase: SupabaseClient | any,
+  userId: string,
+  isEnglish: boolean = false
+): Promise<string> {
+  const now = new Date();
+  const sevenDaysAgoDate = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+  const todayStr = now.toISOString().split('T')[0];
+
+  try {
+    const [profileRes, sessionsRes, assignmentsRes, mistakesRes, gradesRes, examsRes] = await Promise.all([
+      supabase.from('profiles').select('full_name, study_division, target_percentage').eq('id', userId).maybeSingle(),
+      supabase
+        .from('study_sessions')
+        .select('*')
+        .eq('user_id', userId)
+        .gte('completed_at', sevenDaysAgoDate),
+      supabase
+        .from('assignments')
+        .select('*')
+        .eq('user_id', userId),
+      supabase
+        .from('mistake_bank')
+        .select('*')
+        .eq('user_id', userId),
+      supabase
+        .from('grades')
+        .select('*')
+        .eq('user_id', userId)
+        .gte('date', sevenDaysAgoDate),
+      supabase
+        .from('exams')
+        .select('*')
+        .eq('user_id', userId)
+        .gte('exam_date', todayStr)
+        .order('exam_date', { ascending: true })
+        .limit(3),
+    ]);
+
+    const studentName = profileRes.data?.full_name || (isEnglish ? 'Ismail' : 'إسماعيل');
+    const division = profileRes.data?.study_division || (isEnglish ? 'Engineering & Computer Science Track' : 'مسار الهندسة والحاسبات');
+
+    // 1. Focus Sessions
+    const sessions = sessionsRes.data || [];
+    let totalMinutes = 0;
+    const subjectMinutes: Record<string, number> = {};
+    for (const s of sessions) {
+      const mins = Number(s.duration_minutes) || 0;
+      totalMinutes += mins;
+      const sub = s.subject || 'General';
+      subjectMinutes[sub] = (subjectMinutes[sub] || 0) + mins;
+    }
+    const focusHours = (totalMinutes / 60).toFixed(1);
+
+    let focusBreakdown = '';
+    if (sessions.length > 0) {
+      focusBreakdown = Object.entries(subjectMinutes)
+        .map(([sub, mins]) => `  • ${sub}: ${(mins / 60).toFixed(1)} ${isEnglish ? 'hrs' : 'ساعة'}`)
+        .join('\n');
+    } else {
+      focusBreakdown = isEnglish
+        ? '  • No recorded Pomodoro focus sessions this week.'
+        : '  • لا توجد جلسات تركيز بومودورو مسجلة هذا الأسبوع.';
+    }
+
+    // 2. Assignments
+    const allAssignments = assignmentsRes.data || [];
+    const completedAssignments = allAssignments.filter((a: any) => a.is_completed);
+    const pendingAssignments = allAssignments.filter((a: any) => !a.is_completed);
+
+    // 3. Mistake Bank
+    const allMistakes = mistakesRes.data || [];
+    const masteredMistakes = allMistakes.filter((m: any) => m.is_mastered);
+    const activeMistakes = allMistakes.filter((m: any) => !m.is_mastered);
+
+    // 4. Grades
+    const recentGrades = gradesRes.data || [];
+    let gradesText = '';
+    if (recentGrades.length > 0) {
+      gradesText = recentGrades
+        .map((g: any) => `  • ${g.subject} (${g.title}): ${g.score}/${g.max_score}`)
+        .join('\n');
+    } else {
+      gradesText = isEnglish
+        ? '  • No new test grades recorded this week.'
+        : '  • لم يتم تسجيل درجات اختبارات جديدة هذا الأسبوع.';
+    }
+
+    // 5. Next Horizon
+    const upcomingExams = examsRes.data || [];
+    let horizonText = '';
+    if (upcomingExams.length > 0) {
+      horizonText = upcomingExams
+        .map((e: any) => `  • ${e.subject} (${e.exam_date})`)
+        .join('\n');
+    } else {
+      horizonText = isEnglish
+        ? '  • Regular curriculum routine without upcoming official exam deadlines.'
+        : '  • استكمال المنهج المدرسي بانتظام بدون ضغط امتحانات رسمية قريبة.';
+    }
+
+    if (isEnglish) {
+      return (
+        `📋 WEEKLY ACADEMIC PROGRESS REPORT\n` +
+        `Student: ${studentName}\n` +
+        `Track: ${division}\n` +
+        `Period: Past 7 Days (${sevenDaysAgoDate} to ${todayStr})\n\n` +
+        `⏱️ DEEP STUDY FOCUS:\n` +
+        `• Total Focus Time: ${focusHours} hours across ${sessions.length} study sessions\n` +
+        `${focusBreakdown}\n\n` +
+        `📝 ASSIGNMENTS & HOMEWORK:\n` +
+        `• Completed: ${completedAssignments.length} assignments\n` +
+        `• Currently Pending: ${pendingAssignments.length} assignments\n\n` +
+        `🧠 MISTAKE BANK & MASTERY:\n` +
+        `• Mastered & Resolved: ${masteredMistakes.length} previous misconceptions\n` +
+        `• Active Practice Bank: ${activeMistakes.length} questions remaining for review\n\n` +
+        `📊 RECENT ASSESSMENTS & QUIZZES:\n` +
+        `${gradesText}\n\n` +
+        `🎯 NEXT WEEK'S HORIZON:\n` +
+        `${horizonText}\n\n` +
+        `💡 EVALUATION & SUMMARY:\n` +
+        `Solid consistency maintained this week. Keep logging daily focus sessions and clear pending homework on schedule.`
+      );
+    }
+
+    return (
+      `📋 التقرير الدراسي الأسبوعي الشامل (للطالب وولي الأمر):\n` +
+      `الطالب: ${studentName}\n` +
+      `المسار: ${division}\n` +
+      `الفترة: آخر 7 أيام (من ${sevenDaysAgoDate} إلى ${todayStr})\n\n` +
+      `⏱️ ساعات المذاكرة وجلسات التركيز (Pomodoro):\n` +
+      `• إجمالي ساعات التركيز الصافي: ${focusHours} ساعة خلال ${sessions.length} جلسة مذاكرة\n` +
+      `${focusBreakdown}\n\n` +
+      `📝 الواجبات والمهام الدراسية:\n` +
+      `• تم إنجازه وتسليمه: ${completedAssignments.length} واجب\n` +
+      `• الواجبات القادمة الجاري العمل عليها: ${pendingAssignments.length} واجب\n\n` +
+      `🧠 بنك الأخطاء وإتقان المفاهيم الصعبة:\n` +
+      `• أخطاء تم حلها وإتقانها 100%: ${masteredMistakes.length} سؤال\n` +
+      `• أسئلة جاري التدريب عليها وتثبيتها: ${activeMistakes.length} سؤال\n\n` +
+      `📊 درجات الاختبارات والكويزات المسجلة:\n` +
+      `${gradesText}\n\n` +
+      `🎯 المحطة القادمة والأولويات:\n` +
+      `${horizonText}\n\n` +
+      `💡 الخلاصة والتقييم:\n` +
+      `أداء منظم والتزام طيب بالجدول. الاستمرار بنفس وتيرة جلسات التركيز ومتابعة الواجبات أولاً بأول يضمن التفوق والجاهزية التامة لأي امتحان.`
+    );
+  } catch (err) {
+    console.error('Error generating weekly progress report:', err);
+    return isEnglish
+      ? '⚠️ Could not generate weekly report. Please ensure your dashboard data is synced.'
+      : '⚠️ تعذر توليد التقرير الأسبوعي حالياً. تأكد من تسجيل بياناتك في لوحة التحكم.';
+  }
+}
+
+
 

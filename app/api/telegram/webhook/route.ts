@@ -1,7 +1,15 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getSupabaseAdminClient } from '@/lib/supabase/admin';
 import { processUserMessageWithAI } from '@/lib/gemini';
-import { executeBotActions, buildFullStudentContext, getTSCCommandsGuide, isGroupChatDump } from '@/lib/bot-actions';
+import {
+  executeBotActions,
+  buildFullStudentContext,
+  getTSCCommandsGuide,
+  isGroupChatDump,
+  generateDailyMorningBriefing,
+  computeExamReadiness,
+  generateWeeklyProgressReport,
+} from '@/lib/bot-actions';
 
 interface TelegramPhoto {
   file_id: string;
@@ -528,6 +536,61 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ ok: true });
     }
 
+    // -------------------------------------------------------------
+    // DIRECT AUTONOMOUS INTELLIGENCE TRIGGERS (<100ms Deterministic)
+    // -------------------------------------------------------------
+
+    // A. Daily Morning Briefing
+    const isMorningBriefing =
+      /\b(morning briefing|daily brief|صباح الخير|تقرير الصباح|تقرير بداية اليوم|بريف الصباح)\b/i.test(
+        rawText.trim()
+      );
+
+    if (isMorningBriefing) {
+      const briefing = await generateDailyMorningBriefing(supabase, userId, isEnglish);
+      await recordChatMessage(supabase, {
+        userId,
+        role: 'assistant',
+        content: briefing,
+      });
+      await sendTelegramReply(chatId, briefing);
+      return NextResponse.json({ ok: true });
+    }
+
+    // B. AI Exam Readiness Score Engine
+    const isExamReadiness =
+      /\b(exam readiness|readiness|جاهز للامتحان|درجة الاستعداد|درجة استعدادي|استعدادي للامتحان|مستعد للامتحان|هل انا جاهز)\b/i.test(
+        rawText.trim()
+      );
+
+    if (isExamReadiness) {
+      const readinessReport = await computeExamReadiness(supabase, userId, isEnglish);
+      await recordChatMessage(supabase, {
+        userId,
+        role: 'assistant',
+        content: readinessReport,
+      });
+      await sendTelegramReply(chatId, readinessReport);
+      return NextResponse.json({ ok: true });
+    }
+
+    // C. 1-Click Weekly Study & Parent Progress Report
+    const isWeeklyReport =
+      /\b(weekly report|parent report|تقرير الأسبوع|تقرير لولي الأمر|تقرير ولي الامر|تقرير اسبوعي|تقرير شامل|تقرير الاسبوع)\b/i.test(
+        rawText.trim()
+      );
+
+    if (isWeeklyReport) {
+      const progressReport = await generateWeeklyProgressReport(supabase, userId, isEnglish);
+      await recordChatMessage(supabase, {
+        userId,
+        role: 'assistant',
+        content: progressReport,
+      });
+      await sendTelegramReply(chatId, progressReport);
+      return NextResponse.json({ ok: true });
+    }
+
     // Case D: User sent greeting, /start, /help, commands inquiry, or question
     const isExplicitCommandQuery =
       /\b(help|commands|\/help|\/commands|\/start|start|أوامر|الاوامر|الأوامر|اوامر|اوامر البوت|بتعمل ايه|مين انت|عرفني بنفسك|شرح البوت|كيف استخدمك|طريقة الاستخدام|لوحة التحكم|dashboard)\b/i.test(
@@ -535,7 +598,7 @@ export async function POST(req: NextRequest) {
       );
 
     const isSimpleGreetingOnly =
-      /^\/?(yo|hi|hello|hey|sup|ازيك|ازيك يا بوت|سلام|السلام عليكم|الو|اهلا|أهلا|مساء الخير|صباح الخير|bruh)\b/i.test(
+      /^\/?(yo|hi|hello|hey|sup|ازيك|ازيك يا بوت|سلام|السلام عليكم|الو|اهلا|أهلا|مساء الخير|bruh)\b/i.test(
         rawText.trim()
       ) &&
       rawText.trim().split(/\s+/).length <= 3;

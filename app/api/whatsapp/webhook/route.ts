@@ -1,7 +1,22 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getSupabaseAdminClient } from '@/lib/supabase/admin';
 import { processUserMessageWithAI } from '@/lib/gemini';
-import { executeBotActions, buildFullStudentContext, getTSCCommandsGuide, isGroupChatDump } from '@/lib/bot-actions';
+import {
+  executeBotActions,
+  buildFullStudentContext,
+  getTSCCommandsGuide,
+  isGroupChatDump,
+  generateDailyMorningBriefing,
+  computeExamReadiness,
+  generateWeeklyProgressReport,
+} from '@/lib/bot-actions';
+import {
+  sendWhatsAppReply,
+  sendWhatsAppInteractiveButtons,
+  markWhatsAppAsRead,
+  reactWhatsAppMessage,
+  downloadWhatsAppMedia,
+} from '@/lib/whatsapp';
 
 // Verify Token for Meta WhatsApp Cloud API
 const WHATSAPP_VERIFY_TOKEN = process.env.WHATSAPP_VERIFY_TOKEN || 'tsc_baccalaureate_whatsapp_2026';
@@ -65,7 +80,31 @@ export async function POST(req: NextRequest) {
 
       messageId = message.id;
       fromNumber = message.from; // e.g. "201012345678"
-      incomingText = (message.text?.body || message.caption || '').trim();
+
+      // Handle Interactive Button / List clicks from Meta Cloud API
+      if (message.type === 'interactive' && message.interactive) {
+        const buttonReply = message.interactive.button_reply;
+        const listReply = message.interactive.list_reply;
+        const selectedId = buttonReply?.id || listReply?.id || '';
+        const selectedTitle = buttonReply?.title || listReply?.title || '';
+
+        // Map button IDs to natural commands
+        if (selectedId === 'btn_what_to_study') {
+          incomingText = 'أذاكر إيه دلوقتي؟';
+        } else if (selectedId === 'btn_today_schedule') {
+          incomingText = 'قولي جدول النهارده';
+        } else if (selectedId === 'btn_morning_briefing') {
+          incomingText = 'تقرير الصباح';
+        } else if (selectedId === 'btn_exam_readiness') {
+          incomingText = 'جاهز للامتحان؟';
+        } else if (selectedId === 'btn_weekly_report') {
+          incomingText = 'تقرير الأسبوع';
+        } else {
+          incomingText = selectedTitle || selectedId || '';
+        }
+      } else {
+        incomingText = (message.text?.body || message.caption || '').trim();
+      }
 
       // Immediate Read Receipt & Typing Reaction indicator (gives instant feedback on WhatsApp)
       if (messageId && fromNumber) {
@@ -193,12 +232,17 @@ export async function POST(req: NextRequest) {
 
         linkedAccountsCache.set(cleanPhone, { user_id: linkRecord.user_id, ...linkRecord });
 
-        await sendWhatsAppReply(
-          fromNumber,
+        const welcomeLinked =
           '👋 مرحباً بك يا بطل!\n' +
-            'تم ربط رقم الواتساب بحسابك في TSC بنجاح. Your WhatsApp is now connected to TSC!\n\n' +
-            'You can talk to me in English or Arabic anytime. Send me your schedule, homework, questions, or forward school group PDFs and images whenever you need help.'
-        );
+          'تم ربط رقم الواتساب بحسابك في TSC بنجاح. Your WhatsApp is now connected to TSC!\n\n' +
+          'You can talk to me in English or Arabic anytime. Send me your schedule, homework, questions, or forward school group PDFs and images whenever you need help.';
+
+        await sendWhatsAppInteractiveButtons(fromNumber, welcomeLinked, [
+          { id: 'btn_today_schedule', title: isEnglish ? '📅 Today Schedule' : '📅 جدول اليوم' },
+          { id: 'btn_what_to_study', title: isEnglish ? '🧠 What to Study?' : '🧠 أذاكر إيه؟' },
+          { id: 'btn_exam_readiness', title: isEnglish ? '🎯 Exam Readiness' : '🎯 جاهز للامتحان؟' },
+        ]);
+
         if (messageId) {
           reactWhatsAppMessage(fromNumber, messageId, '✅').catch(() => {});
         }
@@ -286,7 +330,97 @@ export async function POST(req: NextRequest) {
 
     const recentHistory = recentHistoryRes.data?.map((m: any) => ({ text: m.content, time: m.created_at })) || [];
 
-    // Check if linked student sent a greeting (e.g. "yo", "hi", "bruh", "ازيك") or is asking for commands / dashboard features
+    // -------------------------------------------------------------
+    // DIRECT AUTONOMOUS INTELLIGENCE TRIGGERS (<100ms Deterministic)
+    // -------------------------------------------------------------
+
+    // A. Daily Morning Briefing
+    const isMorningBriefing =
+      !mediaPart &&
+      /\b(morning briefing|daily brief|صباح الخير|تقرير الصباح|تقرير بداية اليوم|بريف الصباح)\b/i.test(
+        incomingText.trim()
+      );
+
+    if (isMorningBriefing) {
+      const briefing = await generateDailyMorningBriefing(supabase, userId, isEnglish);
+
+      await supabase.from('chat_messages').insert({
+        user_id: userId,
+        role: 'assistant',
+        source: 'whatsapp',
+        content: briefing,
+        media_type: 'text',
+      });
+
+      await sendWhatsAppInteractiveButtons(fromNumber, briefing, [
+        { id: 'btn_what_to_study', title: isEnglish ? '🧠 What to Study?' : '🧠 أذاكر إيه؟' },
+        { id: 'btn_today_schedule', title: isEnglish ? '📅 Today Schedule' : '📅 جدول اليوم' },
+        { id: 'btn_exam_readiness', title: isEnglish ? '🎯 Exam Readiness' : '🎯 جاهز للامتحان؟' },
+      ]);
+
+      if (messageId && fromNumber) {
+        reactWhatsAppMessage(fromNumber, messageId, '☀️').catch(() => {});
+      }
+      return NextResponse.json({ ok: true });
+    }
+
+    // B. AI Exam Readiness Score Engine
+    const isExamReadiness =
+      !mediaPart &&
+      /\b(exam readiness|readiness|جاهز للامتحان|درجة الاستعداد|درجة استعدادي|استعدادي للامتحان|مستعد للامتحان|هل انا جاهز)\b/i.test(
+        incomingText.trim()
+      );
+
+    if (isExamReadiness) {
+      const readinessReport = await computeExamReadiness(supabase, userId, isEnglish);
+
+      await supabase.from('chat_messages').insert({
+        user_id: userId,
+        role: 'assistant',
+        source: 'whatsapp',
+        content: readinessReport,
+        media_type: 'text',
+      });
+
+      await sendWhatsAppInteractiveButtons(fromNumber, readinessReport, [
+        { id: 'btn_what_to_study', title: isEnglish ? '🧠 What to Study?' : '🧠 أذاكر إيه؟' },
+        { id: 'btn_morning_briefing', title: isEnglish ? '☀️ Morning Brief' : '☀️ صباح الخير' },
+        { id: 'btn_weekly_report', title: isEnglish ? '📋 Weekly Report' : '📋 تقرير الأسبوع' },
+      ]);
+
+      if (messageId && fromNumber) {
+        reactWhatsAppMessage(fromNumber, messageId, '🎯').catch(() => {});
+      }
+      return NextResponse.json({ ok: true });
+    }
+
+    // C. 1-Click Weekly Study & Parent Progress Report
+    const isWeeklyReport =
+      !mediaPart &&
+      /\b(weekly report|parent report|تقرير الأسبوع|تقرير لولي الأمر|تقرير ولي الامر|تقرير اسبوعي|تقرير شامل|تقرير الاسبوع)\b/i.test(
+        incomingText.trim()
+      );
+
+    if (isWeeklyReport) {
+      const progressReport = await generateWeeklyProgressReport(supabase, userId, isEnglish);
+
+      await supabase.from('chat_messages').insert({
+        user_id: userId,
+        role: 'assistant',
+        source: 'whatsapp',
+        content: progressReport,
+        media_type: 'text',
+      });
+
+      await sendWhatsAppReply(fromNumber, progressReport);
+
+      if (messageId && fromNumber) {
+        reactWhatsAppMessage(fromNumber, messageId, '📋').catch(() => {});
+      }
+      return NextResponse.json({ ok: true });
+    }
+
+    // D. Commands Guide & Intro Ping
     const isExplicitCommandQuery =
       !mediaPart &&
       /\b(help|commands|\/help|\/commands|أوامر|الاوامر|الأوامر|اوامر|اوامر البوت|بتعمل ايه|مين انت|عرفني بنفسك|شرح البوت|كيف استخدمك|طريقة الاستخدام|لوحة التحكم|dashboard)\b/i.test(
@@ -295,7 +429,7 @@ export async function POST(req: NextRequest) {
 
     const isSimpleGreetingOnly =
       !mediaPart &&
-      /^\/?(yo|hi|hello|hey|sup|start|\/start|ازيك|ازيك يا بوت|سلام|السلام عليكم|الو|اهلا|أهلا|مساء الخير|صباح الخير|bruh)\b/i.test(
+      /^\/?(yo|hi|hello|hey|sup|start|\/start|ازيك|ازيك يا بوت|سلام|السلام عليكم|الو|اهلا|أهلا|مساء الخير|bruh)\b/i.test(
         incomingText.trim()
       ) &&
       incomingText.trim().split(/\s+/).length <= 3;
@@ -315,7 +449,12 @@ export async function POST(req: NextRequest) {
         media_type: 'text',
       });
 
-      await sendWhatsAppReply(fromNumber, guide);
+      await sendWhatsAppInteractiveButtons(fromNumber, guide, [
+        { id: 'btn_what_to_study', title: isEnglish ? '🧠 What to Study?' : '🧠 أذاكر إيه؟' },
+        { id: 'btn_today_schedule', title: isEnglish ? '📅 Today Schedule' : '📅 جدول اليوم' },
+        { id: 'btn_exam_readiness', title: isEnglish ? '🎯 Exam Readiness' : '🎯 جاهز للامتحان؟' },
+      ]);
+
       if (messageId && fromNumber) {
         reactWhatsAppMessage(fromNumber, messageId, '⚡').catch(() => {});
       }
@@ -384,251 +523,3 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Internal error' }, { status: 500 });
   }
 }
-
-// Build a clean, organized, day-by-day weekly timetable for Gemini
-function buildScheduleContext(timetableSlots: any[], pendingTasks: any[]): string {
-  const dayNames: Record<number, { en: string; ar: string }> = {
-    0: { en: 'Saturday', ar: 'السبت' },
-    1: { en: 'Sunday', ar: 'الأحد' },
-    2: { en: 'Monday', ar: 'الإثنين' },
-    3: { en: 'Tuesday', ar: 'الثلاثاء' },
-    4: { en: 'Wednesday', ar: 'الأربعاء' },
-    5: { en: 'Thursday', ar: 'الخميس' },
-    6: { en: 'Friday', ar: 'الجمعة' },
-  };
-
-  const scheduleByDay: Record<number, string[]> = {
-    0: [], 1: [], 2: [], 3: [], 4: [], 5: [], 6: [],
-  };
-
-  for (const slot of timetableSlots) {
-    const d = typeof slot.day_of_week === 'number' ? slot.day_of_week : 0;
-    const detail = `${slot.subject} (${slot.start_time} - ${slot.end_time}${slot.room_or_teacher ? `, ${slot.room_or_teacher}` : ''})`;
-    if (scheduleByDay[d]) {
-      scheduleByDay[d].push(detail);
-    }
-  }
-
-  const weeklyLines = Object.entries(dayNames).map(([dayIdx, name]) => {
-    const d = Number(dayIdx);
-    const classes = scheduleByDay[d]?.length
-      ? scheduleByDay[d].join(' | ')
-      : 'Free / Self-Study / Revision (مراجعة واستذكار)';
-    return `- ${name.ar} (${name.en}): ${classes}`;
-  }).join('\n');
-
-  const homeworkLines = pendingTasks.length
-    ? pendingTasks.map((t: any) =>
-        `- ${t.title} (${t.subject}, Due: ${t.due_date}, Priority: ${t.priority || 'medium'})`
-      ).join('\n')
-    : '- No pending homework registered currently.';
-
-  return `COMPLETE WEEKLY TIMETABLE:\n${weeklyLines}\n\nPENDING HOMEWORK & ASSIGNMENTS:\n${homeworkLines}`;
-}
-
-// Split long responses so they never exceed WhatsApp's 4096-character limit per message
-function splitMessage(text: string, maxLength: number = 3800): string[] {
-  if (text.length <= maxLength) return [text];
-  const chunks: string[] = [];
-  let remaining = text;
-  while (remaining.length > 0) {
-    if (remaining.length <= maxLength) {
-      chunks.push(remaining);
-      break;
-    }
-    let breakIdx = remaining.lastIndexOf('\n\n', maxLength);
-    if (breakIdx === -1 || breakIdx < maxLength / 2) {
-      breakIdx = remaining.lastIndexOf('\n', maxLength);
-    }
-    if (breakIdx === -1 || breakIdx < maxLength / 2) {
-      breakIdx = remaining.lastIndexOf(' ', maxLength);
-    }
-    if (breakIdx === -1) {
-      breakIdx = maxLength;
-    }
-    chunks.push(remaining.substring(0, breakIdx).trim());
-    remaining = remaining.substring(breakIdx).trim();
-  }
-  return chunks;
-}
-
-// Mark incoming message as read immediately (shows instant blue checkmarks to the student)
-async function markWhatsAppAsRead(messageId: string) {
-  const token = process.env.WHATSAPP_ACCESS_TOKEN;
-  const phoneId = process.env.WHATSAPP_PHONE_NUMBER_ID;
-  if (!token || !phoneId || !messageId) return;
-
-  try {
-    await fetch(`https://graph.facebook.com/v20.0/${phoneId}/messages`, {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${token}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        messaging_product: 'whatsapp',
-        status: 'read',
-        message_id: messageId,
-      }),
-    });
-  } catch (err) {
-    console.error('Failed to mark WhatsApp message as read:', err);
-  }
-}
-
-// React with an emoji (e.g. ✍️ when typing/processing, ✅ when completed)
-async function reactWhatsAppMessage(to: string, messageId: string, emoji: string) {
-  const token = process.env.WHATSAPP_ACCESS_TOKEN;
-  const phoneId = process.env.WHATSAPP_PHONE_NUMBER_ID;
-  if (!token || !phoneId || !messageId) return;
-
-  try {
-    await fetch(`https://graph.facebook.com/v20.0/${phoneId}/messages`, {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${token}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        messaging_product: 'whatsapp',
-        recipient_type: 'individual',
-        to: to.replace(/\D/g, ''),
-        type: 'reaction',
-        reaction: {
-          message_id: messageId,
-          emoji,
-        },
-      }),
-    });
-  } catch (err) {
-    console.error('Failed to react to WhatsApp message:', err);
-  }
-}
-
-// Clean text for WhatsApp: strip all asterisks and markdown bolding so it's pure normal human font
-function formatForWhatsApp(text: string): string {
-  if (!text) return '';
-  return text
-    .replace(/\*{1,3}(.*?)\*{1,3}/g, '$1') // strip all bold/italic asterisks completely
-    .replace(/\*/g, '')                     // strip residual asterisks
-    .replace(/^#{1,4}\s+(.+)$/gm, '$1')     // clean headers
-    .replace(/^-\s+/gm, '• ')
-    .trim();
-}
-
-// Send message back using Meta WhatsApp Cloud API or Twilio WhatsApp API
-async function sendWhatsAppReply(to: string, text: string) {
-  const formattedText = formatForWhatsApp(text);
-  const chunks = splitMessage(formattedText, 3800);
-
-  // Option 1: Meta WhatsApp Cloud API
-  const metaAccessToken = process.env.WHATSAPP_ACCESS_TOKEN;
-  const metaPhoneNumberId = process.env.WHATSAPP_PHONE_NUMBER_ID;
-
-  if (metaAccessToken && metaPhoneNumberId) {
-    for (const chunk of chunks) {
-      try {
-        const res = await fetch(`https://graph.facebook.com/v20.0/${metaPhoneNumberId}/messages`, {
-          method: 'POST',
-          headers: {
-            'Authorization': `Bearer ${metaAccessToken}`,
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            messaging_product: 'whatsapp',
-            to: to.replace(/\D/g, ''),
-            type: 'text',
-            text: { body: chunk },
-          }),
-        });
-          if (!res.ok) {
-            const errJson = await res.text();
-            console.error(`Meta WhatsApp send error (HTTP ${res.status}) to ${to}:`, errJson);
-            try {
-              const errObj = JSON.parse(errJson);
-              if (errObj?.error?.code === 190) {
-                console.error(
-                  `🚨 [Meta WhatsApp CRITICAL - TOKEN EXPIRED]: The WHATSAPP_ACCESS_TOKEN has expired (OAuthException 190).\n` +
-                  `Session has expired. Please refresh the 24-hour token in Meta API Setup OR generate a permanent System User token in Meta Business Settings.`
-                );
-              } else if (errObj?.error?.code === 131030) {
-                console.warn(
-                  `⚠️ [Meta WhatsApp Sandbox Restriction]: Phone number ${to} is not in your Meta allowed recipients list.\n` +
-                  `Go to developers.facebook.com -> WhatsApp -> API Setup -> "To" dropdown to add this number during development, or switch App to Live mode.`
-                );
-              }
-            } catch {}
-          } else {
-            console.log(`✅ [Meta WhatsApp Message Sent] to ${to}`);
-          }
-        } catch (err) {
-          console.error('Failed to send WhatsApp message via Meta API:', err);
-        }
-      }
-      return;
-    }
-
-  // Option 2: Twilio WhatsApp API
-  const twilioSid = process.env.TWILIO_ACCOUNT_SID;
-  const twilioAuth = process.env.TWILIO_AUTH_TOKEN;
-  const twilioFrom = process.env.TWILIO_WHATSAPP_NUMBER || 'whatsapp:+14155238886';
-
-  if (twilioSid && twilioAuth) {
-    for (const chunk of chunks) {
-      try {
-        const toFormatted = to.startsWith('whatsapp:') ? to : `whatsapp:+${to.replace(/\D/g, '')}`;
-        const params = new URLSearchParams();
-        params.append('From', twilioFrom);
-        params.append('To', toFormatted);
-        params.append('Body', chunk);
-
-        const res = await fetch(`https://api.twilio.com/2010-04-01/Accounts/${twilioSid}/Messages.json`, {
-          method: 'POST',
-          headers: {
-            'Authorization': 'Basic ' + Buffer.from(`${twilioSid}:${twilioAuth}`).toString('base64'),
-            'Content-Type': 'application/x-www-form-urlencoded',
-          },
-          body: params.toString(),
-        });
-        if (!res.ok) {
-          const errJson = await res.text();
-          console.error('Twilio WhatsApp send error:', errJson);
-        }
-      } catch (err) {
-        console.error('Failed to send WhatsApp message via Twilio API:', err);
-      }
-    }
-    return;
-  }
-
-  console.log(`[WhatsApp Local / Mock Reply to ${to}]: ${formattedText}`);
-}
-
-// Download WhatsApp Media (PDFs, Images, Audio) via Meta Graph API
-async function downloadWhatsAppMedia(mediaId: string): Promise<{ buffer: Buffer; mimeType: string } | null> {
-  const token = process.env.WHATSAPP_ACCESS_TOKEN;
-  if (!token || !mediaId) return null;
-  try {
-    const metaRes = await fetch(`https://graph.facebook.com/v20.0/${mediaId}`, {
-      headers: { Authorization: `Bearer ${token}` },
-    });
-    if (!metaRes.ok) return null;
-    const metaData = await metaRes.json();
-    const mediaUrl = metaData.url;
-    if (!mediaUrl) return null;
-
-    const fileRes = await fetch(mediaUrl, {
-      headers: { Authorization: `Bearer ${token}` },
-    });
-    if (!fileRes.ok) return null;
-    const arrayBuffer = await fileRes.arrayBuffer();
-    return {
-      buffer: Buffer.from(arrayBuffer),
-      mimeType: metaData.mime_type || fileRes.headers.get('content-type') || 'application/octet-stream',
-    };
-  } catch (err) {
-    console.error('Error downloading WhatsApp media:', err);
-    return null;
-  }
-}
-
