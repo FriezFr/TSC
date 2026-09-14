@@ -75,8 +75,8 @@ async function sendChatAction(chatId: number, action: 'typing' | 'upload_documen
 function getNewUserGreeting(isEnglish: boolean): string {
   if (isEnglish) {
     return (
-      '👋 Welcome to TaskerBot / TSC AI — Your Smart School Operating System!\n\n' +
-      'I am your dedicated academic AI companion built specifically for the Egyptian Baccalaureate and Thanaweya.\n\n' +
+      '👋 Welcome to TSC — Your Smart School Operating System!\n\n' +
+      'I am your dedicated academic AI companion built specifically for the Egyptian Baccalaureate and Thanaweya (The Student Companion).\n\n' +
       'Here is everything I can do for you:\n' +
       '• 📚 Timetable & Schedule Optimization: Manage your weekly lessons, homework deadlines, and optimize daily study blocks.\n' +
       '• ✍️ Step-by-Step Problem Solving: Ask me any question in Math, Physics, Chemistry, Biology, or Languages with full working.\n' +
@@ -93,7 +93,7 @@ function getNewUserGreeting(isEnglish: boolean): string {
   }
 
   return (
-    'أهلاً بك! 👋 أنا TaskerBot — المساعد الدراسي الشامل ونظام التشغيل المدرسي الذكي للثانوية العامة والبكالوريا المصرية (The Student Companion - TSC).\n\n' +
+    'أهلاً بك! 👋 أنا TSC — رفيقك الدراسي الشامل ونظام التشغيل المدرسي الذكي للثانوية العامة والبكالوريا المصرية (The Student Companion).\n\n' +
     'أنا هنا عشان أسهل عليك المذاكرة وأرتب لك كل تفاصيل دراستك. دي أهم الحاجات اللي أقدر أعملها لك:\n\n' +
     '📚 تنظيم جدول الحصص والمذاكرة: برتب مواعيد حصصك ودروسك وأوقات استذكار كل مادة بدون أي تعارض.\n' +
     '✍️ حل وشرح المسائل خطوة بخطوة: اسألني في أي مادة (فيزياء، رياضيات، كيمياء، أحياء، لغات، تاريخ...) وهشرحلك طريقة الحل والفكرة وراها.\n' +
@@ -278,7 +278,7 @@ export async function POST(req: NextRequest) {
 
         await sendTelegramReply(
           chatId,
-          'حبيبي يا إسماعيل يا بطل! أنا TaskerBot / TSC AI معاك ومصحصحلك جداً أهو. 👋\n\n' +
+          'حبيبي يا إسماعيل يا بطل! أنا TSC معاك ومصحصحلك جداً أهو. 👋\n\n' +
             'تم ربط حسابك في التليجرام بنجاح! جاهز لأي سؤال، حل مسائل، مذكرات، أو تنظيم جدولك.\n\n' +
             'You can talk to me in English or Arabic anytime!\n' +
             'قول لي حابب نبدأ بإيه! 😎'
@@ -340,8 +340,8 @@ export async function POST(req: NextRequest) {
         });
 
         const introHeader = isEnglish
-          ? '👋 Welcome to TaskerBot / TSC AI! (Your Smart School Companion)\n\n'
-          : '👋 أهلاً بك في TaskerBot / TSC AI! (مساعدك المدرسي الذكي)\n\n';
+          ? '👋 Welcome to TSC! (Your Smart School Operating System)\n\n'
+          : '👋 أهلاً بك في TSC! (رفيقك ومساعدك المدرسي الذكي)\n\n';
 
         const linkFooter = isEnglish
           ? '\n\n💡 Tip: To link this Telegram account to your web dashboard and sync your schedule, generate a code at: https://taskerbot.vercel.app/dashboard/settings'

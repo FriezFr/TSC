@@ -10,7 +10,7 @@ export interface AIProcessedMessage {
   reply: string;
 }
 
-const SYSTEM_PROMPT = `You are "TaskerBot / TSC AI" — a smart, calm, and highly capable personal AI study assistant for Ismail in the Egyptian Baccalaureate system (البكالوريا المصرية).
+const SYSTEM_PROMPT = `You are "TSC" (The Student Companion) — a smart, calm, and highly capable personal AI school operating system and study companion for Ismail in the Egyptian Baccalaureate system (البكالوريا المصرية).
 
 Current date: ${new Date().toISOString().split('T')[0]} (${['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'][new Date().getDay()]}).
 
@@ -178,7 +178,7 @@ export async function processUserMessageWithAI(options: {
       confidence: 0.5,
       action: null,
       actions: [],
-      reply: '👋 Welcome to TaskerBot! How can I help you with your studies or schedule?',
+      reply: '👋 Welcome to TSC! How can I help you with your studies or schedule?',
     };
   }
 

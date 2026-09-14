@@ -229,7 +229,7 @@ export default function AuthPage() {
           <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-[#111111] border border-white/10 text-xs font-mono tracking-wider text-neutral-300 mb-3">
             <Bot className="w-4 h-4 text-white" />
             <span className="font-bold tracking-wider">
-              TASKERBOT / TSC AI
+              TSC AI • THE STUDENT COMPANION
             </span>
           </div>
           <h1 className="text-3xl sm:text-4xl font-black tracking-tight text-white uppercase">

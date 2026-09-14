@@ -163,9 +163,9 @@ export interface Translations {
 export const translations: Record<Language, Translations> = {
   en: {
     // Brand
-    brandName: 'TaskerBot / TSC AI',
-    brandTagline: 'TaskerBot / TSC AI • Smart School Assistant',
-    systemName: 'TaskerBot / TSC AI System',
+    brandName: 'TSC',
+    brandTagline: 'TSC • The Student Companion',
+    systemName: 'TSC AI School OS',
 
     // Navigation
     navToday: 'Today View',
@@ -209,7 +209,7 @@ export const translations: Record<Language, Translations> = {
     answerLabel: 'Answer',
 
     // Chat & Telegram Sync
-    chatTitle: 'TaskerBot / TSC AI',
+    chatTitle: 'TSC AI',
     chatSubtitle: 'Your personal AI study partner & copilot, synced in real-time between Telegram, WhatsApp, and your dashboard.',
     telegramSyncBadge: 'Telegram Sync Active',
     telegramConnected: 'Connected to Telegram (@TSCTaskerBot)',
@@ -261,8 +261,8 @@ export const translations: Record<Language, Translations> = {
     // Auth Page
     signIn: 'Sign In',
     signUp: 'Sign Up',
-    signInDesc: 'Enter your credentials to access TaskerBot / TSC AI',
-    signUpDesc: 'Create your private student profile for TaskerBot / TSC AI',
+    signInDesc: 'Enter your credentials to access TSC',
+    signUpDesc: 'Create your private student profile for TSC',
     emailLabel: 'Email Address',
     passwordLabel: 'Password',
     confirmPasswordLabel: 'Confirm Password',
@@ -322,9 +322,9 @@ export const translations: Record<Language, Translations> = {
   },
   ar: {
     // Brand
-    brandName: 'TaskerBot / TSC AI',
-    brandTagline: 'TaskerBot / TSC AI • المساعد المدرسي الذكي',
-    systemName: 'منظومة TaskerBot / TSC AI الذكية',
+    brandName: 'TSC',
+    brandTagline: 'TSC • رفيق الطالب الذكي',
+    systemName: 'منظومة TSC الذكية للثانوية والبكالوريا',
 
     // Navigation
     navToday: 'نظرة اليوم',
@@ -368,7 +368,7 @@ export const translations: Record<Language, Translations> = {
     answerLabel: 'الإجابة النموذجية',
 
     // Chat & Telegram Sync
-    chatTitle: 'TaskerBot / TSC AI',
+    chatTitle: 'TSC AI',
     chatSubtitle: 'مساعدك وصاحبك الدراسي الذكي، متزامن لحظياً مع تيليجرام وواتساب ولوحة التحكم.',
     telegramSyncBadge: 'مزامنة تيليجرام نشطة',
     telegramConnected: 'متصل مع بوت تيليجرام (@TSCTaskerBot)',
@@ -420,8 +420,8 @@ export const translations: Record<Language, Translations> = {
     // Auth Page
     signIn: 'تسجيل الدخول',
     signUp: 'إنشاء حساب جديد',
-    signInDesc: 'أدخل بياناتك للدخول إلى TaskerBot / TSC AI',
-    signUpDesc: 'أنشئ ملفك الأكاديمي الخاص في منظومة TaskerBot / TSC AI',
+    signInDesc: 'أدخل بياناتك للدخول إلى منظومة TSC',
+    signUpDesc: 'أنشئ ملفك الأكاديمي الخاص في منظومة TSC',
     emailLabel: 'البريد الإلكتروني',
     passwordLabel: 'كلمة المرور',
     confirmPasswordLabel: 'تأكيد كلمة المرور',

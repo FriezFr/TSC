@@ -3,8 +3,8 @@ import './globals.css';
 import { AppProvider } from '@/lib/context';
 
 export const metadata: Metadata = {
-  title: 'TaskerBot / TSC AI • AI School Assistant',
-  description: 'TaskerBot / TSC AI — Personal AI school assistant & study copilot for Egyptian Baccalaureate (البكالوريا المصرية) students.',
+  title: 'TSC • AI School Operating System',
+  description: 'TSC (The Student Companion) — Personal AI school operating system & study copilot for Egyptian Baccalaureate (البكالوريا المصرية) students.',
 };
 
 export const viewport: Viewport = {
