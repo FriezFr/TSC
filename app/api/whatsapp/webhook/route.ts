@@ -172,7 +172,7 @@ export async function POST(req: NextRequest) {
       /^\/?(en|english)\b/i.test(incomingText) ||
       /\b(speak|talk|reply|switch to|switch)\s+(in\s+)?english\b/i.test(incomingText);
     const hasArabic = /[\u0600-\u06FF]/.test(incomingText);
-    const isEnglish = explicitEnglish || (!hasArabic && /[a-zA-Z]{3,}/.test(incomingText));
+    const isEnglish = explicitEnglish || (!hasArabic && /[a-zA-Z]/.test(incomingText));
 
     const is6CharCode = incomingText.trim().match(/^\/?(start[\s=_]+)?([A-Za-z0-9]{6})$/i);
 
@@ -317,30 +317,38 @@ export async function POST(req: NextRequest) {
     const recentHistory = recentHistoryRes.data?.map((m: any) => ({ text: m.content, time: m.created_at })) || [];
 
     // 4. Process with Gemini
-    const aiResponse = await processUserMessageWithAI({
-      text: incomingText,
-      mediaPart,
-      fileName,
-      languagePreference: isEnglish ? 'en' : 'ar',
-      userProfile: profile,
-      databaseContext,
-      recentMessages: recentHistory,
-    });
-
-    // 5. Execute Dashboard Actions (Quizzes, Flashcards, Assignments, Deadlines, Exams, Timetable)
-    let actionFeedback = '';
-    const actionsToRun = aiResponse.actions?.length ? aiResponse.actions : aiResponse.action;
-    if (actionsToRun) {
-      const actionResult = await executeBotActions(supabase, userId, actionsToRun, {
-        source: 'whatsapp',
-        isEnglish,
+    let finalReply = '';
+    try {
+      const aiResponse = await processUserMessageWithAI({
+        text: incomingText,
+        mediaPart,
+        fileName,
+        languagePreference: isEnglish ? 'en' : 'ar',
+        userProfile: profile,
+        databaseContext,
+        recentMessages: recentHistory,
       });
-      actionFeedback = actionResult.combinedFeedback;
-    }
 
-    let finalReply = aiResponse.reply;
-    if (actionFeedback) {
-      finalReply += `\n\n${actionFeedback}`;
+      // 5. Execute Dashboard Actions (Quizzes, Flashcards, Assignments, Deadlines, Exams, Timetable)
+      let actionFeedback = '';
+      const actionsToRun = aiResponse.actions?.length ? aiResponse.actions : aiResponse.action;
+      if (actionsToRun) {
+        const actionResult = await executeBotActions(supabase, userId, actionsToRun, {
+          source: 'whatsapp',
+          isEnglish,
+        });
+        actionFeedback = actionResult.combinedFeedback;
+      }
+
+      finalReply = aiResponse.reply;
+      if (actionFeedback) {
+        finalReply += `\n\n${actionFeedback}`;
+      }
+    } catch (aiErr: any) {
+      console.error('Error generating AI reply for student:', aiErr);
+      finalReply = isEnglish
+        ? "Hey! I encountered a brief glitch processing that. Could you please resend it or tell me what you need?"
+        : "أهلاً يا بطل! حصل خطأ بسيط في معالجة رسالتك، ممكن تبعتهالي تاني وأنا معاك على طول.";
     }
 
     // 6. Record Assistant Reply
@@ -528,10 +536,15 @@ async function sendWhatsAppReply(to: string, text: string) {
             console.error(`Meta WhatsApp send error (HTTP ${res.status}) to ${to}:`, errJson);
             try {
               const errObj = JSON.parse(errJson);
-              if (errObj?.error?.code === 131030) {
+              if (errObj?.error?.code === 190) {
+                console.error(
+                  `🚨 [Meta WhatsApp CRITICAL - TOKEN EXPIRED]: The WHATSAPP_ACCESS_TOKEN has expired (OAuthException 190).\n` +
+                  `Session has expired. Please refresh the 24-hour token in Meta API Setup OR generate a permanent System User token in Meta Business Settings.`
+                );
+              } else if (errObj?.error?.code === 131030) {
                 console.warn(
                   `⚠️ [Meta WhatsApp Sandbox Restriction]: Phone number ${to} is not in your Meta allowed recipients list.\n` +
-                  `Go to developers.facebook.com -> WhatsApp -> API Setup -> "To" dropdown to add this number during development.`
+                  `Go to developers.facebook.com -> WhatsApp -> API Setup -> "To" dropdown to add this number during development, or switch App to Live mode.`
                 );
               }
             } catch {}

@@ -33,7 +33,7 @@ export async function POST(req: NextRequest) {
     const profile = profileRes.data;
 
     const hasArabic = /[\u0600-\u06FF]/.test(message);
-    const isEnglish = !hasArabic && /[a-zA-Z]{3,}/.test(message);
+    const isEnglish = !hasArabic && /[a-zA-Z]/.test(message);
 
     // 2. Process with Gemini
     const aiResponse = await processUserMessageWithAI({

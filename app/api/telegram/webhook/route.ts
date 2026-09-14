@@ -241,7 +241,7 @@ export async function POST(req: NextRequest) {
       /^\/?(en|english)\b/i.test(rawText) ||
       /\b(speak|talk|reply|switch to|switch)\s+(in\s+)?english\b/i.test(rawText);
     const hasArabic = /[\u0600-\u06FF]/.test(rawText);
-    const isEnglish = explicitEnglish || (!hasArabic && /[a-zA-Z]{3,}/.test(rawText));
+    const isEnglish = explicitEnglish || (!hasArabic && /[a-zA-Z]/.test(rawText));
 
     // 2. If NOT linked: Check if this message is a sync code to link account
     if (!existingLink) {
