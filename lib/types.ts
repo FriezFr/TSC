@@ -304,3 +304,51 @@ export interface DailyPlanResponse {
   blocks: DailyPlanBlock[];
   recommendations: string[];
 }
+
+// ----------------------------------------------------
+// AI School OS: Academic Memory & Mistake Bank Types
+// ----------------------------------------------------
+
+export interface AcademicMemory {
+  id: string;
+  user_id?: string;
+  subject: string;
+  topic: string;
+  confidence_level: 'low' | 'medium' | 'high';
+  common_errors?: string[];
+  notes?: string;
+  detected_at: string;
+  updated_at: string;
+}
+
+export interface MistakeItem {
+  id: string;
+  user_id?: string;
+  subject: string;
+  topic?: string;
+  question: string;
+  student_answer?: string;
+  correct_answer: string;
+  explanation?: string;
+  mistake_type?: 'sign_error' | 'concept_gap' | 'calculation' | 'careless' | 'unknown';
+  times_repeated: number;
+  is_mastered: boolean;
+  created_at: string;
+  updated_at?: string;
+}
+
+export interface StudyRecommendation {
+  subject: string;
+  topic?: string;
+  durationMinutes: number;
+  reason: string;
+  urgency: 'high' | 'medium' | 'normal';
+  actionType: 'assignment' | 'exam_prep' | 'weak_topic_revision' | 'mistake_practice' | 'regular_study';
+  alternative?: {
+    subject: string;
+    topic?: string;
+    durationMinutes: number;
+    reason: string;
+  };
+}
+

@@ -21,12 +21,23 @@ export type BotActionType =
   | 'grade'
   | 'grade_create'
   | 'habit'
-  | 'habit_log';
+  | 'habit_log'
+  | 'memory_record'
+  | 'mistake_record'
+  | 'mistake_mastered';
 
 export interface BotAction {
   type: BotActionType;
   title?: string;
   subject?: string;
+  topic?: string;
+  confidence_level?: 'low' | 'medium' | 'high';
+  common_errors?: string[];
+  question?: string;
+  student_answer?: string;
+  correct_answer?: string;
+  explanation?: string;
+  mistake_type?: 'sign_error' | 'concept_gap' | 'calculation' | 'careless' | 'unknown';
   date?: string; // YYYY-MM-DD
   due_date?: string; // alias for date
   dayIndex?: number; // 0: Sat, 1: Sun, ..., 6: Fri
@@ -845,6 +856,132 @@ export async function executeBotActions(
         results.push({ actionType: type, success: true, feedback });
         continue;
       }
+
+      // -------------------------------------------------------------
+      // 7. ACADEMIC MEMORY (WEAK TOPICS & PITFALLS)
+      // -------------------------------------------------------------
+      if (type === 'memory_record') {
+        const subject = normalizeSubject(action.subject || 'General');
+        const topic = action.topic || action.title || 'General Concept';
+        const confidence = action.confidence_level || 'low';
+        const commonErrors = Array.isArray(action.common_errors) ? action.common_errors : [];
+        const notes = action.notes || '';
+
+        const { data: existingMem } = await supabase
+          .from('academic_memories')
+          .select('*')
+          .eq('user_id', userId)
+          .ilike('subject', `%${subject}%`)
+          .ilike('topic', `%${topic}%`)
+          .maybeSingle();
+
+        if (existingMem) {
+          await supabase
+            .from('academic_memories')
+            .update({
+              confidence_level: confidence,
+              common_errors: commonErrors.length > 0 ? commonErrors : existingMem.common_errors,
+              notes: notes || existingMem.notes,
+              updated_at: new Date().toISOString(),
+            })
+            .eq('id', existingMem.id);
+        } else {
+          await supabase.from('academic_memories').insert({
+            user_id: userId,
+            subject,
+            topic,
+            confidence_level: confidence,
+            common_errors: commonErrors,
+            notes,
+          });
+        }
+
+        const feedback = isEnglish
+          ? `🧠 Study Memory: Recorded "${topic}" in ${subject} (${confidence} confidence). I will prioritize this in your revision plans and mock tests!`
+          : `🧠 ذاكرة TSC الأكاديمية: تم تسجيل نقطة "${topic}" في ${subject} (مستوى: ${confidence}). سأعطيها الأولوية في خطط مذاكرتك والاختبارات القادمة!`;
+
+        results.push({ actionType: type, success: true, feedback });
+        continue;
+      }
+
+      // -------------------------------------------------------------
+      // 8. MISTAKE BANK
+      // -------------------------------------------------------------
+      if (type === 'mistake_record') {
+        const subject = normalizeSubject(action.subject || 'General');
+        const topic = action.topic || '';
+        const question = action.question || action.title || '';
+        const studentAnswer = action.student_answer || '';
+        const correctAnswer = action.correct_answer || '';
+        const explanation = action.explanation || '';
+        const mistakeType = action.mistake_type || 'concept_gap';
+
+        if (question && correctAnswer) {
+          const { data: existingMistake } = await supabase
+            .from('mistake_bank')
+            .select('*')
+            .eq('user_id', userId)
+            .ilike('question', `%${question.slice(0, 50)}%`)
+            .maybeSingle();
+
+          if (existingMistake) {
+            await supabase
+              .from('mistake_bank')
+              .update({
+                times_repeated: (existingMistake.times_repeated || 1) + 1,
+                is_mastered: false,
+                updated_at: new Date().toISOString(),
+              })
+              .eq('id', existingMistake.id);
+          } else {
+            await supabase.from('mistake_bank').insert({
+              user_id: userId,
+              subject,
+              topic,
+              question,
+              student_answer: studentAnswer,
+              correct_answer: correctAnswer,
+              explanation,
+              mistake_type: mistakeType,
+              times_repeated: 1,
+              is_mastered: false,
+            });
+          }
+
+          const feedback = isEnglish
+            ? `📚 Saved mistake to your Mistake Bank (${subject}). You can practice your mistakes anytime under Mistake Bank!`
+            : `📚 تم حفظ السؤال في بنك الأخطاء (${subject}). يمكنك مراجعة وتصفير أخطائك في أي وقت لتثبيت الإجابة النموذجية!`;
+
+          results.push({ actionType: type, success: true, feedback });
+        }
+        continue;
+      }
+
+      if (type === 'mistake_mastered') {
+        const questionOrTopic = action.question || action.topic || action.title || '';
+        const { data: matched } = await supabase
+          .from('mistake_bank')
+          .select('*')
+          .eq('user_id', userId)
+          .eq('is_mastered', false)
+          .or(`question.ilike.%${questionOrTopic}%,topic.ilike.%${questionOrTopic}%`)
+          .limit(1);
+
+        const target = matched?.[0];
+        if (target) {
+          await supabase
+            .from('mistake_bank')
+            .update({ is_mastered: true, updated_at: new Date().toISOString() })
+            .eq('id', target.id);
+
+          const feedback = isEnglish
+            ? `🎉 Great job! Marked mistake as Mastered in your Mistake Bank.`
+            : `🎉 عاش يا بطل! تم تحديد السؤال كـ "تم إتقانه" في بنك الأخطاء.`;
+
+          results.push({ actionType: type, success: true, feedback, targetId: target.id });
+        }
+        continue;
+      }
     } catch (err) {
       console.error(`Error executing action ${action.type}:`, err);
       results.push({
@@ -869,16 +1006,19 @@ export async function executeBotActions(
 
 /**
  * Builds a comprehensive overview of the student's active database items
- * (Timetable, Assignments, Exams, Flashcard Decks, Notes) to pass as rich context to Gemini.
+ * (Timetable, Assignments, Exams, Flashcard Decks, Notes, Academic Memories, Mistake Bank)
+ * to pass as rich context to Gemini.
  */
 export async function buildFullStudentContext(supabase: SupabaseClient | any, userId: string): Promise<string> {
   try {
-    const [timetableRes, assignmentsRes, examsRes, decksRes, notesRes] = await Promise.all([
+    const [timetableRes, assignmentsRes, examsRes, decksRes, notesRes, memoriesRes, mistakesRes] = await Promise.all([
       supabase.from('timetable').select('*').eq('user_id', userId).order('day_of_week', { ascending: true }),
       supabase.from('assignments').select('*').eq('user_id', userId).eq('is_completed', false).order('due_date', { ascending: true }).limit(15),
       supabase.from('exams').select('*').eq('user_id', userId).order('exam_date', { ascending: true }).limit(10),
       supabase.from('flashcard_decks').select('id, subject, title, created_at').eq('user_id', userId).order('created_at', { ascending: false }).limit(10),
       supabase.from('notes').select('content, tags').eq('user_id', userId).order('created_at', { ascending: false }).limit(3),
+      supabase.from('academic_memories').select('*').eq('user_id', userId).order('confidence_level', { ascending: true }).limit(10),
+      supabase.from('mistake_bank').select('*').eq('user_id', userId).eq('is_mastered', false).order('times_repeated', { ascending: false }).limit(10),
     ]);
 
     const dayNames = ['Saturday', 'Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday'];
@@ -898,6 +1038,14 @@ export async function buildFullStudentContext(supabase: SupabaseClient | any, us
       (d: any) => `- [Deck ID: ${d.id}] ${d.title} (${d.subject})`
     );
 
+    const memoryLines = (memoriesRes.data || []).map(
+      (m: any) => `- [Weak Topic] ${m.subject} -> ${m.topic} (Confidence: ${m.confidence_level}${m.common_errors?.length ? `, Errors: ${m.common_errors.join(', ')}` : ''})`
+    );
+
+    const mistakeLines = (mistakesRes.data || []).map(
+      (mis: any) => `- [Mistake Bank] ${mis.subject}${mis.topic ? ` (${mis.topic})` : ''}: Q: "${mis.question.slice(0, 80)}" -> Correct: "${mis.correct_answer.slice(0, 60)}" (Repeated: ${mis.times_repeated}x)`
+    );
+
     const noteLines = (notesRes.data || []).map(
       (n: any) => `- ${n.content}`
     );
@@ -911,6 +1059,12 @@ ${assignmentLines.length > 0 ? assignmentLines.join('\n') : 'No pending assignme
 
 === UPCOMING EXAMS ===
 ${examLines.length > 0 ? examLines.join('\n') : 'No upcoming exams scheduled.'}
+
+=== AI STUDY MEMORY (WEAK TOPICS TO PRIORITIZE) ===
+${memoryLines.length > 0 ? memoryLines.join('\n') : 'No weak topics logged yet.'}
+
+=== UNMASTERED MISTAKE BANK (FREQUENT ERRORS) ===
+${mistakeLines.length > 0 ? mistakeLines.join('\n') : 'No unmastered mistakes logged.'}
 
 === EXISTING FLASHCARD & QUIZ DECKS ===
 ${deckLines.length > 0 ? deckLines.join('\n') : 'No flashcard decks yet.'}

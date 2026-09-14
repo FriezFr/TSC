@@ -4,7 +4,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { useApp } from '@/lib/context';
 import { GlassCard } from '@/components/ui/GlassCard';
 import { playChime } from '@/lib/audio';
-import { Flame, Play, Pause, RotateCcw, Volume2, CheckCircle2, History } from 'lucide-react';
+import { Flame, Play, Pause, RotateCcw, Volume2, CheckCircle2, History, Sparkles } from 'lucide-react';
 import { THANAWEYA_SUBJECTS } from '@/lib/types';
 
 export default function PomodoroPage() {
@@ -14,6 +14,8 @@ export default function PomodoroPage() {
   const [focusMinutes, setFocusMinutes] = useState(25);
   const [breakMinutes, setBreakMinutes] = useState(5);
   const [subject, setSubject] = useState('Physics');
+  const [topic, setTopic] = useState('');
+  const [isAutoConfigured, setIsAutoConfigured] = useState(false);
 
   const [timeLeft, setTimeLeft] = useState(focusMinutes * 60);
   const [isRunning, setIsRunning] = useState(false);
@@ -21,10 +23,35 @@ export default function PomodoroPage() {
   const timerRef = useRef<NodeJS.Timeout | null>(null);
 
   useEffect(() => {
-    if (!isRunning) {
+    if (typeof window === 'undefined') return;
+    const params = new URLSearchParams(window.location.search);
+    const paramSubject = params.get('subject');
+    const paramDuration = params.get('duration');
+    const paramTopic = params.get('topic');
+    const paramAutoStart = params.get('autoStart');
+
+    if (paramSubject || paramDuration || paramTopic) {
+      setIsAutoConfigured(true);
+      if (paramSubject) setSubject(paramSubject);
+      if (paramTopic) setTopic(paramTopic);
+      if (paramDuration) {
+        const d = parseInt(paramDuration, 10);
+        if (!isNaN(d) && d > 0) {
+          setFocusMinutes(d);
+          setTimeLeft(d * 60);
+        }
+      }
+      if (paramAutoStart === 'true') {
+        setIsRunning(true);
+      }
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!isRunning && !isAutoConfigured) {
       setTimeLeft((mode === 'focus' ? focusMinutes : breakMinutes) * 60);
     }
-  }, [focusMinutes, breakMinutes, mode, isRunning]);
+  }, [focusMinutes, breakMinutes, mode, isRunning, isAutoConfigured]);
 
   useEffect(() => {
     if (isRunning) {
@@ -123,6 +150,21 @@ export default function PomodoroPage() {
           </button>
         </div>
       </div>
+
+      {isAutoConfigured && (
+        <div className="p-3.5 rounded-xl bg-gradient-to-r from-blue-500/10 via-indigo-500/10 to-purple-500/10 border border-blue-500/30 flex items-center justify-between gap-2 text-xs text-blue-200 animate-in fade-in">
+          <div className="flex items-center gap-2">
+            <Sparkles className="w-4 h-4 text-blue-400 shrink-0" />
+            <span>
+              Targeted Session: <strong className="text-white">{subject}</strong>
+              {topic ? ` — ${topic}` : ''} ({focusMinutes} min)
+            </span>
+          </div>
+          <span className="text-[10px] px-2 py-0.5 rounded-full bg-blue-500/20 text-blue-300 font-mono shrink-0">
+            AI Directed
+          </span>
+        </div>
+      )}
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Main Timer Display */}

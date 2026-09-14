@@ -14,8 +14,10 @@ import {
   Sparkles,
   Trash2,
   AlertTriangle,
+  BookX,
 } from 'lucide-react';
 import { THANAWEYA_SUBJECTS } from '@/lib/types';
+import MistakeBankModal from '@/components/Dashboard/MistakeBankModal';
 
 export default function FlashcardsPage() {
   const {
@@ -26,6 +28,8 @@ export default function FlashcardsPage() {
     deleteFlashcard,
     deleteDeck,
     recordCardReview,
+    addMistake,
+    language,
     t,
   } = useApp();
 
@@ -38,6 +42,7 @@ export default function FlashcardsPage() {
   const [isDeckModalOpen, setIsDeckModalOpen] = useState(false);
   const [isCardModalOpen, setIsCardModalOpen] = useState(false);
   const [isDeleteDeckModalOpen, setIsDeleteDeckModalOpen] = useState(false);
+  const [isMistakeModalOpen, setIsMistakeModalOpen] = useState(false);
   const [cardToDelete, setCardToDelete] = useState<string | null>(null);
 
   // Deck Form
@@ -106,6 +111,13 @@ export default function FlashcardsPage() {
     const card = currentDeckCards[quizCardIndex];
     if (card) {
       await recordCardReview(card.id, isCorrect);
+      if (!isCorrect && currentDeck) {
+        // Automatically save wrong card to Mistake Bank
+        await addMistake(currentDeck.subject, card.question, card.answer, {
+          topic: currentDeck.title,
+          mistakeType: 'concept_gap',
+        });
+      }
     }
 
     setIsFlipped(false);
@@ -131,6 +143,13 @@ export default function FlashcardsPage() {
         </div>
 
         <div className="flex items-center gap-2">
+          <button
+            onClick={() => setIsMistakeModalOpen(true)}
+            className="px-3.5 py-2 rounded-xl bg-rose-500/10 hover:bg-rose-500/20 border border-rose-500/30 text-rose-300 text-xs font-semibold flex items-center gap-1.5 cursor-pointer transition-all"
+          >
+            <BookX className="w-3.5 h-3.5" />
+            <span>{language === 'ar' ? 'بنك الأخطاء' : 'Mistake Bank'}</span>
+          </button>
           <button
             onClick={() => setIsDeckModalOpen(true)}
             className="px-3.5 py-2 rounded-xl glass-button-secondary text-xs font-semibold flex items-center gap-1.5 cursor-pointer"
@@ -574,6 +593,12 @@ export default function FlashcardsPage() {
           </div>
         </div>
       </GlassModal>
+
+      {/* Mistake Bank Modal */}
+      <MistakeBankModal
+        isOpen={isMistakeModalOpen}
+        onClose={() => setIsMistakeModalOpen(false)}
+      />
     </div>
   );
 }

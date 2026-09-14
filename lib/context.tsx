@@ -19,11 +19,15 @@ import {
   AiActivityItem,
   UserPreferences,
   ScheduleConflict,
+  AcademicMemory,
+  MistakeItem,
+  StudyRecommendation,
 } from './types';
 import { getSupabaseClient } from './supabase/client';
 import { Language, Translations, translations } from './i18n';
 import { detectScheduleConflicts } from './scheduling/conflicts';
 import { loadUserPreferences, saveUserPreferences, DEFAULT_PREFERENCES } from './scheduling/preferences';
+import { computeWhatToStudyNow } from './scheduling/decision-engine';
 
 interface AppContextType {
   user: User | null;
@@ -98,6 +102,28 @@ interface AppContextType {
   conflicts: ScheduleConflict[];
   userPreferences: UserPreferences;
   updateUserPreferences: (prefs: Partial<UserPreferences>) => Promise<void>;
+  // Academic Memory & Weak Topics
+  academicMemories: AcademicMemory[];
+  addAcademicMemory: (subject: string, topic: string, confidence?: 'low' | 'medium' | 'high', commonErrors?: string[], notes?: string) => Promise<void>;
+  updateAcademicMemory: (id: string, updates: Partial<AcademicMemory>) => Promise<void>;
+  deleteAcademicMemory: (id: string) => Promise<void>;
+  // Mistake Bank
+  mistakes: MistakeItem[];
+  addMistake: (
+    subjectOrMistake: string | Omit<MistakeItem, 'id' | 'created_at' | 'times_repeated' | 'is_mastered'>,
+    question?: string,
+    correctAnswer?: string,
+    options?: {
+      topic?: string;
+      studentAnswer?: string;
+      explanation?: string;
+      mistakeType?: MistakeItem['mistake_type'];
+    }
+  ) => Promise<void>;
+  markMistakeMastered: (id: string, isMastered?: boolean) => Promise<void>;
+  deleteMistake: (id: string) => Promise<void>;
+  // Decision Engine
+  getWhatToStudyRecommendation: () => StudyRecommendation;
 }
 
 const AppContext = createContext<AppContextType | null>(null);
@@ -162,6 +188,24 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
   const [aiActivities, setAiActivities] = useState<AiActivityItem[]>([]);
   const [userPreferences, setUserPreferences] = useState<UserPreferences>(DEFAULT_PREFERENCES);
+  const [academicMemories, setAcademicMemories] = useState<AcademicMemory[]>(() => {
+    if (typeof window !== 'undefined') {
+      try {
+        const local = localStorage.getItem('tsc_academic_memories');
+        if (local) return JSON.parse(local);
+      } catch {}
+    }
+    return [];
+  });
+  const [mistakes, setMistakes] = useState<MistakeItem[]>(() => {
+    if (typeof window !== 'undefined') {
+      try {
+        const local = localStorage.getItem('tsc_mistake_bank');
+        if (local) return JSON.parse(local);
+      } catch {}
+    }
+    return [];
+  });
 
   // Auto-calculated conflicts
   const conflicts = React.useMemo(
@@ -315,6 +359,32 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       // 13. User Scheduling Preferences
       const prefs = await loadUserPreferences(supabase, userId);
       setUserPreferences(prefs);
+
+      // 14. Academic Memories (Weak Topics)
+      try {
+        const { data: memData } = await supabase
+          .from('academic_memories')
+          .select('*')
+          .eq('user_id', userId)
+          .order('confidence_level', { ascending: true });
+        if (memData) {
+          setAcademicMemories(memData);
+          localStorage.setItem('tsc_academic_memories', JSON.stringify(memData));
+        }
+      } catch {}
+
+      // 15. Mistake Bank
+      try {
+        const { data: misData } = await supabase
+          .from('mistake_bank')
+          .select('*')
+          .eq('user_id', userId)
+          .order('created_at', { ascending: false });
+        if (misData) {
+          setMistakes(misData);
+          localStorage.setItem('tsc_mistake_bank', JSON.stringify(misData));
+        }
+      } catch {}
     } catch (err) {
       console.error('Error fetching Supabase data:', err);
     }
@@ -358,6 +428,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         setNotes([]);
         setAiActivities([]);
         setUserPreferences(DEFAULT_PREFERENCES);
+        setAcademicMemories([]);
+        setMistakes([]);
       }
       setAuthLoading(false);
     });
@@ -1133,6 +1205,237 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     await saveUserPreferences(supabase, user?.id, updated);
   };
 
+  // ----------------------------------------------------
+  // Academic Memories CRUD
+  // ----------------------------------------------------
+  const addAcademicMemory = async (
+    subject: string,
+    topic: string,
+    confidence: 'low' | 'medium' | 'high' = 'low',
+    commonErrors: string[] = [],
+    notes?: string
+  ) => {
+    const newMem: AcademicMemory = {
+      id: Date.now().toString(),
+      user_id: user?.id,
+      subject,
+      topic,
+      confidence_level: confidence,
+      common_errors: commonErrors,
+      notes,
+      detected_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    };
+
+    setAcademicMemories((prev) => {
+      const updated = [newMem, ...prev];
+      try {
+        localStorage.setItem('tsc_academic_memories', JSON.stringify(updated));
+      } catch {}
+      return updated;
+    });
+
+    const supabase = getSupabaseClient();
+    if (supabase && user) {
+      try {
+        const { data } = await supabase
+          .from('academic_memories')
+          .insert({
+            user_id: user.id,
+            subject,
+            topic,
+            confidence_level: confidence,
+            common_errors: commonErrors,
+            notes,
+          })
+          .select('*')
+          .single();
+        if (data) {
+          setAcademicMemories((prev) => prev.map((m) => (m.id === newMem.id ? data : m)));
+        }
+      } catch (err) {
+        console.error('Error saving academic memory:', err);
+      }
+    }
+  };
+
+  const updateAcademicMemory = async (id: string, updates: Partial<AcademicMemory>) => {
+    setAcademicMemories((prev) => {
+      const updated = prev.map((m) => (m.id === id ? { ...m, ...updates, updated_at: new Date().toISOString() } : m));
+      try {
+        localStorage.setItem('tsc_academic_memories', JSON.stringify(updated));
+      } catch {}
+      return updated;
+    });
+
+    const supabase = getSupabaseClient();
+    if (supabase && user) {
+      try {
+        await supabase
+          .from('academic_memories')
+          .update({ ...updates, updated_at: new Date().toISOString() })
+          .eq('id', id);
+      } catch (err) {
+        console.error('Error updating academic memory:', err);
+      }
+    }
+  };
+
+  const deleteAcademicMemory = async (id: string) => {
+    setAcademicMemories((prev) => {
+      const updated = prev.filter((m) => m.id !== id);
+      try {
+        localStorage.setItem('tsc_academic_memories', JSON.stringify(updated));
+      } catch {}
+      return updated;
+    });
+
+    const supabase = getSupabaseClient();
+    if (supabase && user) {
+      try {
+        await supabase.from('academic_memories').delete().eq('id', id);
+      } catch (err) {
+        console.error('Error deleting academic memory:', err);
+      }
+    }
+  };
+
+  // ----------------------------------------------------
+  // Mistake Bank CRUD
+  // ----------------------------------------------------
+  const addMistake = async (
+    subjectOrMistake: string | Omit<MistakeItem, 'id' | 'created_at' | 'times_repeated' | 'is_mastered'>,
+    questionParam?: string,
+    correctAnswerParam?: string,
+    options?: {
+      topic?: string;
+      studentAnswer?: string;
+      explanation?: string;
+      mistakeType?: MistakeItem['mistake_type'];
+    }
+  ) => {
+    let mistake: Omit<MistakeItem, 'id' | 'created_at' | 'times_repeated' | 'is_mastered'>;
+    if (typeof subjectOrMistake === 'string') {
+      mistake = {
+        subject: subjectOrMistake,
+        question: questionParam || '',
+        correct_answer: correctAnswerParam || '',
+        topic: options?.topic,
+        student_answer: options?.studentAnswer,
+        explanation: options?.explanation,
+        mistake_type: options?.mistakeType || 'concept_gap',
+      };
+    } else {
+      mistake = subjectOrMistake;
+    }
+
+    const newMistake: MistakeItem = {
+      ...mistake,
+      id: Date.now().toString(),
+      user_id: user?.id,
+      times_repeated: 1,
+      is_mastered: false,
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    };
+
+    setMistakes((prev) => {
+      const existing = prev.find((m) => m.question.toLowerCase() === mistake.question.toLowerCase());
+      let updated: MistakeItem[];
+      if (existing) {
+        updated = prev.map((m) =>
+          m.id === existing.id
+            ? { ...m, times_repeated: (m.times_repeated || 1) + 1, is_mastered: false, updated_at: new Date().toISOString() }
+            : m
+        );
+      } else {
+        updated = [newMistake, ...prev];
+      }
+      try {
+        localStorage.setItem('tsc_mistake_bank', JSON.stringify(updated));
+      } catch {}
+      return updated;
+    });
+
+    const supabase = getSupabaseClient();
+    if (supabase && user) {
+      try {
+        await supabase.from('mistake_bank').insert({
+          user_id: user.id,
+          subject: mistake.subject,
+          topic: mistake.topic,
+          question: mistake.question,
+          student_answer: mistake.student_answer,
+          correct_answer: mistake.correct_answer,
+          explanation: mistake.explanation,
+          mistake_type: mistake.mistake_type || 'concept_gap',
+          times_repeated: 1,
+          is_mastered: false,
+        });
+      } catch (err) {
+        console.error('Error saving to mistake bank:', err);
+      }
+    }
+  };
+
+  const markMistakeMastered = async (id: string, isMastered: boolean = true) => {
+    setMistakes((prev) => {
+      const updated = prev.map((m) =>
+        m.id === id ? { ...m, is_mastered: isMastered, updated_at: new Date().toISOString() } : m
+      );
+      try {
+        localStorage.setItem('tsc_mistake_bank', JSON.stringify(updated));
+      } catch {}
+      return updated;
+    });
+
+    const supabase = getSupabaseClient();
+    if (supabase && user) {
+      try {
+        await supabase
+          .from('mistake_bank')
+          .update({ is_mastered: isMastered, updated_at: new Date().toISOString() })
+          .eq('id', id);
+      } catch (err) {
+        console.error('Error marking mistake mastered:', err);
+      }
+    }
+  };
+
+  const deleteMistake = async (id: string) => {
+    setMistakes((prev) => {
+      const updated = prev.filter((m) => m.id !== id);
+      try {
+        localStorage.setItem('tsc_mistake_bank', JSON.stringify(updated));
+      } catch {}
+      return updated;
+    });
+
+    const supabase = getSupabaseClient();
+    if (supabase && user) {
+      try {
+        await supabase.from('mistake_bank').delete().eq('id', id);
+      } catch (err) {
+        console.error('Error deleting mistake:', err);
+      }
+    }
+  };
+
+  // ----------------------------------------------------
+  // Decision Engine: What Should I Study Now?
+  // ----------------------------------------------------
+  const getWhatToStudyRecommendation = (): StudyRecommendation => {
+    return computeWhatToStudyNow({
+      timetable,
+      assignments,
+      exams,
+      sessions,
+      academicMemories,
+      mistakes,
+      language,
+    });
+  };
+
   return (
     <AppContext.Provider
       value={{
@@ -1191,6 +1494,15 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         conflicts,
         userPreferences,
         updateUserPreferences,
+        academicMemories,
+        addAcademicMemory,
+        updateAcademicMemory,
+        deleteAcademicMemory,
+        mistakes,
+        addMistake,
+        markMistakeMastered,
+        deleteMistake,
+        getWhatToStudyRecommendation,
       }}
     >
       {children}

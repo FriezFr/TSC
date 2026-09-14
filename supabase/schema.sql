@@ -312,3 +312,63 @@ CREATE POLICY "Users can view their own preferences" ON public.user_preferences
 CREATE POLICY "Users can update their own preferences" ON public.user_preferences
   FOR ALL USING (auth.uid() = user_id) WITH CHECK (auth.uid() = user_id);
 
+-- ==============================================================================
+-- 16. ACADEMIC MEMORIES (Persistent Student Strengths, Weak Topics & Pitfalls)
+-- ==============================================================================
+CREATE TABLE IF NOT EXISTS public.academic_memories (
+  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  user_id UUID REFERENCES auth.users(id) ON DELETE CASCADE NOT NULL,
+  subject TEXT NOT NULL,
+  topic TEXT NOT NULL,
+  confidence_level TEXT NOT NULL DEFAULT 'low' CHECK (confidence_level IN ('low', 'medium', 'high')),
+  common_errors TEXT[] DEFAULT '{}',
+  notes TEXT,
+  detected_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+ALTER TABLE public.academic_memories ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "Users can view their own academic memories" ON public.academic_memories
+  FOR SELECT USING (auth.uid() = user_id);
+CREATE POLICY "Users can insert their own academic memories" ON public.academic_memories
+  FOR INSERT WITH CHECK (auth.uid() = user_id);
+CREATE POLICY "Users can update their own academic memories" ON public.academic_memories
+  FOR UPDATE USING (auth.uid() = user_id);
+CREATE POLICY "Users can delete their own academic memories" ON public.academic_memories
+  FOR DELETE USING (auth.uid() = user_id);
+
+CREATE INDEX IF NOT EXISTS idx_academic_memories_user ON public.academic_memories(user_id, subject);
+
+-- ==============================================================================
+-- 17. MISTAKE BANK (Personal Question & Error Repository)
+-- ==============================================================================
+CREATE TABLE IF NOT EXISTS public.mistake_bank (
+  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  user_id UUID REFERENCES auth.users(id) ON DELETE CASCADE NOT NULL,
+  subject TEXT NOT NULL,
+  topic TEXT,
+  question TEXT NOT NULL,
+  student_answer TEXT,
+  correct_answer TEXT NOT NULL,
+  explanation TEXT,
+  mistake_type TEXT DEFAULT 'concept_gap' CHECK (mistake_type IN ('sign_error', 'concept_gap', 'calculation', 'careless', 'unknown')),
+  times_repeated INTEGER NOT NULL DEFAULT 1,
+  is_mastered BOOLEAN NOT NULL DEFAULT FALSE,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+ALTER TABLE public.mistake_bank ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "Users can view their own mistake bank" ON public.mistake_bank
+  FOR SELECT USING (auth.uid() = user_id);
+CREATE POLICY "Users can insert their own mistake bank" ON public.mistake_bank
+  FOR INSERT WITH CHECK (auth.uid() = user_id);
+CREATE POLICY "Users can update their own mistake bank" ON public.mistake_bank
+  FOR UPDATE USING (auth.uid() = user_id);
+CREATE POLICY "Users can delete their own mistake bank" ON public.mistake_bank
+  FOR DELETE USING (auth.uid() = user_id);
+
+CREATE INDEX IF NOT EXISTS idx_mistake_bank_user ON public.mistake_bank(user_id, subject, is_mastered);
+

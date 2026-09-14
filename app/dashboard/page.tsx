@@ -21,6 +21,10 @@ import Link from 'next/link';
 import ScheduleImportModal from '@/components/ScheduleImporter/ScheduleImportModal';
 import DailyPlannerModal from '@/components/AI/DailyPlannerModal';
 import AiActivityFeed from '@/components/AI/AiActivityFeed';
+import WhatShouldIStudyCard from '@/components/Dashboard/WhatShouldIStudyCard';
+import StudyMemoryModal from '@/components/Dashboard/StudyMemoryModal';
+import MistakeBankModal from '@/components/Dashboard/MistakeBankModal';
+import { Brain, BookX } from 'lucide-react';
 import { DailyPlanResponse } from '@/lib/types';
 
 export default function TodayViewPage() {
@@ -48,6 +52,8 @@ export default function TodayViewPage() {
 
   const [isTimetableModalOpen, setIsTimetableModalOpen] = useState(false);
   const [isPlannerOpen, setIsPlannerOpen] = useState(false);
+  const [isMemoryOpen, setIsMemoryOpen] = useState(false);
+  const [isMistakeOpen, setIsMistakeOpen] = useState(false);
   const [dailyPlan, setDailyPlan] = useState<DailyPlanResponse | null>(null);
   const [isPlanLoading, setIsPlanLoading] = useState(false);
   const [quickTaskText, setQuickTaskText] = useState('');
@@ -213,6 +219,22 @@ export default function TodayViewPage() {
             </button>
 
             <button
+              onClick={() => setIsMemoryOpen(true)}
+              className="px-3.5 py-2 rounded-xl bg-purple-500/10 hover:bg-purple-500/20 border border-purple-500/30 text-purple-200 text-xs font-bold flex items-center justify-center gap-1.5 cursor-pointer transition-all"
+            >
+              <Brain className="w-3.5 h-3.5 text-purple-400" />
+              <span>{language === 'ar' ? 'ذاكرة المذاكرة' : 'Study Memory'}</span>
+            </button>
+
+            <button
+              onClick={() => setIsMistakeOpen(true)}
+              className="px-3.5 py-2 rounded-xl bg-rose-500/10 hover:bg-rose-500/20 border border-rose-500/30 text-rose-200 text-xs font-bold flex items-center justify-center gap-1.5 cursor-pointer transition-all"
+            >
+              <BookX className="w-3.5 h-3.5 text-rose-400" />
+              <span>{language === 'ar' ? 'بنك الأخطاء' : 'Mistake Bank'}</span>
+            </button>
+
+            <button
               onClick={() => setIsTimetableModalOpen(true)}
               className="px-4 py-2 rounded-xl glass-button-primary text-xs font-bold cursor-pointer"
             >
@@ -221,6 +243,12 @@ export default function TodayViewPage() {
           </div>
         </div>
       </GlassCard>
+
+      {/* AI What Should I Study Now Decision Card */}
+      <WhatShouldIStudyCard
+        onOpenStudyMemory={() => setIsMemoryOpen(true)}
+        onOpenMistakeBank={() => setIsMistakeOpen(true)}
+      />
 
       {/* Schedule Conflicts & Optimization Alerts */}
       {conflicts.length > 0 && (
@@ -573,6 +601,18 @@ export default function TodayViewPage() {
         plan={dailyPlan}
         isLoading={isPlanLoading}
         onRegenerate={handleGeneratePlan}
+      />
+
+      {/* AI Study Memory Modal */}
+      <StudyMemoryModal
+        isOpen={isMemoryOpen}
+        onClose={() => setIsMemoryOpen(false)}
+      />
+
+      {/* AI Mistake Bank Modal */}
+      <MistakeBankModal
+        isOpen={isMistakeOpen}
+        onClose={() => setIsMistakeOpen(false)}
       />
     </div>
   );
