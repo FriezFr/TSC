@@ -71,6 +71,44 @@ async function sendChatAction(chatId: number, action: 'typing' | 'upload_documen
   }
 }
 
+// Comprehensive greeting and full explanation for new or unlinked Telegram accounts
+function getNewUserGreeting(isEnglish: boolean): string {
+  if (isEnglish) {
+    return (
+      '👋 Welcome to TaskerBot / TSC AI — Your Smart School Operating System!\n\n' +
+      'I am your dedicated academic AI companion built specifically for the Egyptian Baccalaureate and Thanaweya.\n\n' +
+      'Here is everything I can do for you:\n' +
+      '• 📚 Timetable & Schedule Optimization: Manage your weekly lessons, homework deadlines, and optimize daily study blocks.\n' +
+      '• ✍️ Step-by-Step Problem Solving: Ask me any question in Math, Physics, Chemistry, Biology, or Languages with full working.\n' +
+      '• 📄 Worksheet & PDF Scanner: Send photos of questions or PDF lecture notes — I read, solve, and summarize them instantly.\n' +
+      '• 🧠 AI Study Memory: Tracks your weak topics and recurring errors to prioritize them before exams.\n' +
+      '• 🎯 Mistake Bank & Mock Exams: Saves previous errors into a dedicated practice bank so you never repeat them.\n' +
+      '• ⏱️ Pomodoro Focus Tracking: Monitor genuine study time and focus cycles.\n\n' +
+      '🔗 If you are a student and want to link this Telegram account to your web dashboard:\n' +
+      '1. Open your Dashboard: https://taskerbot.vercel.app/dashboard/settings\n' +
+      '2. Tap "Generate Code"\n' +
+      '3. Send `/start YOUR_CODE` here to connect your schedule instantly!\n\n' +
+      '💡 You can ask me any study question, send a problem, or attach a photo right now and I will solve it for you!'
+    );
+  }
+
+  return (
+    'أهلاً بك! 👋 أنا TaskerBot — المساعد الدراسي الشامل ونظام التشغيل المدرسي الذكي للثانوية العامة والبكالوريا المصرية (The Student Companion - TSC).\n\n' +
+    'أنا هنا عشان أسهل عليك المذاكرة وأرتب لك كل تفاصيل دراستك. دي أهم الحاجات اللي أقدر أعملها لك:\n\n' +
+    '📚 تنظيم جدول الحصص والمذاكرة: برتب مواعيد حصصك ودروسك وأوقات استذكار كل مادة بدون أي تعارض.\n' +
+    '✍️ حل وشرح المسائل خطوة بخطوة: اسألني في أي مادة (فيزياء، رياضيات، كيمياء، أحياء، لغات، تاريخ...) وهشرحلك طريقة الحل والفكرة وراها.\n' +
+    '📄 قراءة الصور ومذكرات الـ PDF: صور أي مسألة من كتاب أو ملخص PDF وهحله وألخص أفكاره فوراً.\n' +
+    '🧠 ذاكرة المذاكرة ونقاط الضعف: بنسجل المواضيع اللي بتتلخبط فيها وبنراجعها معاك قبل الامتحانات.\n' +
+    '🎯 بنك الأخطاء والامتحانات التجريبية: بنجمع أخطاءك السابقة في بنك مخصص ونعمل عليها تدريبات عشان ماتكررهاش.\n' +
+    '⏱️ جلسات التركيز وبومودورو: متابعة ساعات المذاكرة الصافية.\n\n' +
+    '🔗 لو أنت طالب ومعاك حساب على المنصة وعاوز تربط حساب التليجرام ده بحسابك:\n' +
+    '1️⃣ ادخل على إعدادات حسابك في الموقع: https://taskerbot.vercel.app/dashboard/settings\n' +
+    '2️⃣ اضغط على "توليد رمز" (Generate Code)\n' +
+    '3️⃣ ابعت `/start الرمز` هنا وهيتم ربط حسابك وجدولك فوراً!\n\n' +
+    '💡 تقدر تسألني أو تبعتلي أي مسألة أو سؤال دلوقتي فوراً وهجاوبك وأساعدك!'
+  );
+}
+
 // Clean text for Telegram: strip all asterisks and markdown headers so text is pure, normal human font
 function formatForTelegram(text: string): string {
   if (!text) return '';
@@ -198,6 +236,13 @@ export async function POST(req: NextRequest) {
       .limit(1)
       .maybeSingle();
 
+    // Language detection
+    const explicitEnglish =
+      /^\/?(en|english)\b/i.test(rawText) ||
+      /\b(speak|talk|reply|switch to|switch)\s+(in\s+)?english\b/i.test(rawText);
+    const hasArabic = /[\u0600-\u06FF]/.test(rawText);
+    const isEnglish = explicitEnglish || (!hasArabic && /[a-zA-Z]{3,}/.test(rawText));
+
     // 2. If NOT linked: Check if this message is a sync code to link account
     if (!existingLink) {
       const linkMatch = rawText.match(/^\/?(start[\s=_]+)?([A-Za-z0-9]{6})$/i);
@@ -234,28 +279,79 @@ export async function POST(req: NextRequest) {
         await sendTelegramReply(
           chatId,
           'حبيبي يا إسماعيل يا بطل! أنا TaskerBot / TSC AI معاك ومصحصحلك جداً أهو. 👋\n\n' +
-            'قولي بقى يا بشمهندس، أخبار المذاكرة والتحضير إيه؟ بما إننا في مسار الهندسة والحاسبات وهدفنا الـ 99% إن شاء الله، فإحنا هدفنا فوق وحلمك قريب جداً، بس محتاجين نلعبها صح ونكون دايماً سابقين بأقوى أداء! 🎯🚀\n\n' +
-            'You can also talk to me in English or Arabic anytime!\n' +
-            'تحب نعمل إيه النهاردة؟\n' +
-            '- تشرحلي حاجة واقفة معاك في الرياضة أو الفيزياء أو الحاسب ونظبطها؟\n' +
-            '- تبعتلي صورة سؤال أو مسألة رمة نحلها سوا خطوة بخطوة؟\n' +
-            '- تبعتلي ملف PDF لدرس أو ملخص نقراه ونطلّع أفكار الامتحانات منه؟\n' +
-            '- ولا حابب نظبط جدول مذاكرة ونرتب أهداف الأسبوع دا؟\n\n' +
-            'سماعتي معاك يا حطاب، قول لي حابب نبدأ بإيه! 😎'
+            'تم ربط حسابك في التليجرام بنجاح! جاهز لأي سؤال، حل مسائل، مذكرات، أو تنظيم جدولك.\n\n' +
+            'You can talk to me in English or Arabic anytime!\n' +
+            'قول لي حابب نبدأ بإيه! 😎'
         );
         return NextResponse.json({ ok: true });
       }
 
-      // Unlinked greeting
-      await sendTelegramReply(
-        chatId,
-        '👋 Welcome to TaskerBot / TSC AI Assistant!\n\n' +
-          'To connect your account:\n' +
-          '1. Open your Dashboard: https://taskerbot.vercel.app\n' +
-          '2. Go to Settings -> Telegram Bot\n' +
-          '3. Click "Generate Code"\n' +
-          '4. Send `/start YOUR_CODE` here to link your account!'
-      );
+      // Check if message is a simple greeting or general introductory ping
+      const isGreetingOnly =
+        !message.document &&
+        !message.photo &&
+        (/^\/?(hi|hello|hey|salam|start|help|\/start|\/help|سلام|السلام عليكم|الو|مين|مين معايا|اهلا|أهلا|ازيك|ازيك يا بوت|مساء الخير|صباح الخير)\b/i.test(
+          rawText.trim()
+        ) ||
+          rawText.trim().length <= 4);
+
+      if (isGreetingOnly) {
+        await sendTelegramReply(chatId, getNewUserGreeting(isEnglish));
+        return NextResponse.json({ ok: true });
+      }
+
+      // If new/unlinked user sends a real question, homework problem, image, or PDF:
+      // Answer it fully using Gemini in guest mode + include welcome header and linking footer
+      try {
+        await sendChatAction(chatId, message.document ? 'upload_document' : 'typing');
+
+        let mediaPart: { mimeType: string; data: string } | undefined = undefined;
+        let fileName: string | undefined = undefined;
+
+        if (message.document) {
+          const doc = message.document;
+          fileName = doc.file_name || 'Study Document';
+          const downloaded = await downloadTelegramFile(doc.file_id);
+          if (downloaded) {
+            mediaPart = {
+              mimeType: doc.mime_type || 'application/pdf',
+              data: downloaded.buffer.toString('base64'),
+            };
+          }
+        } else if (message.photo && message.photo.length > 0) {
+          const largestPhoto = message.photo[message.photo.length - 1];
+          const downloaded = await downloadTelegramFile(largestPhoto.file_id);
+          if (downloaded) {
+            mediaPart = {
+              mimeType: 'image/jpeg',
+              data: downloaded.buffer.toString('base64'),
+            };
+          }
+        }
+
+        const aiResponse = await processUserMessageWithAI({
+          text: rawText,
+          mediaPart,
+          fileName,
+          languagePreference: isEnglish ? 'en' : 'ar',
+          userProfile: undefined,
+          databaseContext: '',
+          recentMessages: [],
+        });
+
+        const introHeader = isEnglish
+          ? '👋 Welcome to TaskerBot / TSC AI! (Your Smart School Companion)\n\n'
+          : '👋 أهلاً بك في TaskerBot / TSC AI! (مساعدك المدرسي الذكي)\n\n';
+
+        const linkFooter = isEnglish
+          ? '\n\n💡 Tip: To link this Telegram account to your web dashboard and sync your schedule, generate a code at: https://taskerbot.vercel.app/dashboard/settings'
+          : '\n\n💡 ملحوظة: لربط حساب التليجرام ده بحسابك على الموقع ومتابعة جدولك وواجباتك، ابعت رمز الربط من الإعدادات: https://taskerbot.vercel.app/dashboard/settings';
+
+        await sendTelegramReply(chatId, `${introHeader}${aiResponse.reply}${linkFooter}`);
+      } catch (err) {
+        console.error('Error processing guest message in Telegram:', err);
+        await sendTelegramReply(chatId, getNewUserGreeting(isEnglish));
+      }
       return NextResponse.json({ ok: true });
     }
 
@@ -271,13 +367,6 @@ export async function POST(req: NextRequest) {
 
     // Trigger typing action
     await sendChatAction(chatId, message.document ? 'upload_document' : 'typing');
-
-    // Language detection
-    const explicitEnglish =
-      /^\/?(en|english)\b/i.test(rawText) ||
-      /\b(speak|talk|reply|switch to|switch)\s+(in\s+)?english\b/i.test(rawText);
-    const hasArabic = /[\u0600-\u06FF]/.test(rawText);
-    const isEnglish = explicitEnglish || (!hasArabic && /[a-zA-Z]{3,}/.test(rawText));
 
     // Fetch full active database context (timetable, assignments, exams, flashcard decks, notes)
     const databaseContext = await buildFullStudentContext(supabase, userId);

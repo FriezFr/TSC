@@ -11,6 +11,44 @@ const linkedAccountsCache = new Map<string, { user_id: string; [key: string]: an
   ['201037776165', { user_id: '1ec72596-62d2-43cc-aa96-31f09cf5eead', is_linked: true }],
 ]);
 
+// Comprehensive greeting and full explanation for new or unlinked phone numbers
+function getNewUserGreeting(isEnglish: boolean): string {
+  if (isEnglish) {
+    return (
+      '👋 Welcome to TaskerBot / TSC AI — Your Smart School Operating System!\n\n' +
+      'I am your dedicated academic AI companion built specifically for the Egyptian Baccalaureate and Thanaweya.\n\n' +
+      'Here is everything I can do for you:\n' +
+      '• 📚 Timetable & Schedule Optimization: Manage your weekly lessons, homework deadlines, and optimize daily study blocks.\n' +
+      '• ✍️ Step-by-Step Problem Solving: Ask me any question in Math, Physics, Chemistry, Biology, or Languages with full working.\n' +
+      '• 📄 Worksheet & PDF Scanner: Send photos of questions or PDF lecture notes — I read, solve, and summarize them instantly.\n' +
+      '• 🧠 AI Study Memory: Tracks your weak topics and recurring errors to prioritize them before exams.\n' +
+      '• 🎯 Mistake Bank & Mock Exams: Saves previous errors into a dedicated practice bank so you never repeat them.\n' +
+      '• ⏱️ Pomodoro Focus Tracking: Monitor genuine study time and focus cycles.\n\n' +
+      '🔗 If you are a student and want to link this number to your web account:\n' +
+      '1. Open your Dashboard: https://taskerbot.vercel.app/dashboard/settings\n' +
+      '2. Tap "Generate Code"\n' +
+      '3. Send your 6-character code here to connect your schedule instantly!\n\n' +
+      '💡 You can ask me any study question, send a problem, or attach a photo right now and I will solve it for you!'
+    );
+  }
+
+  return (
+    'أهلاً بك! 👋 أنا TaskerBot — المساعد الدراسي الشامل ونظام التشغيل المدرسي الذكي للثانوية العامة والبكالوريا المصرية (The Student Companion - TSC).\n\n' +
+    'أنا هنا عشان أسهل عليك المذاكرة وأرتب لك كل تفاصيل دراستك. دي أهم الحاجات اللي أقدر أعملها لك:\n\n' +
+    '📚 تنظيم جدول الحصص والمذاكرة: برتب مواعيد حصصك ودروسك وأوقات استذكار كل مادة بدون أي تعارض.\n' +
+    '✍️ حل وشرح المسائل خطوة بخطوة: اسألني في أي مادة (فيزياء، رياضيات، كيمياء، أحياء، لغات، تاريخ...) وهشرحلك طريقة الحل والفكرة وراها.\n' +
+    '📄 قراءة الصور ومذكرات الـ PDF: صور أي مسألة من كتاب أو ملخص PDF وهحله وألخص أفكاره فوراً.\n' +
+    '🧠 ذاكرة المذاكرة ونقاط الضعف: بنسجل المواضيع اللي بتتلخبط فيها وبنراجعها معاك قبل الامتحانات.\n' +
+    '🎯 بنك الأخطاء والامتحانات التجريبية: بنجمع أخطاءك السابقة في بنك مخصص ونعمل عليها تدريبات عشان ماتكررهاش.\n' +
+    '⏱️ جلسات التركيز وبومودورو: متابعة ساعات المذاكرة الصافية.\n\n' +
+    '🔗 لو أنت طالب ومعاك حساب على المنصة وعاوز تربط رقمك ده:\n' +
+    '1️⃣ ادخل على إعدادات حسابك في الموقع: https://taskerbot.vercel.app/dashboard/settings\n' +
+    '2️⃣ اضغط على "توليد رمز" (Generate Code)\n' +
+    '3️⃣ ابعت الرمز المكون من 6 خانات هنا وهيتم ربط رقمك وجدولك فوراً!\n\n' +
+    '💡 تقدر تسألني أو تبعتلي أي مسألة أو سؤال دلوقتي فوراً وهجاوبك وأساعدك!'
+  );
+}
+
 /**
  * 1. Webhook Verification (GET)
  * Meta WhatsApp Cloud API tests your endpoint by sending a challenge request:
@@ -130,6 +168,12 @@ export async function POST(req: NextRequest) {
       }
     }
 
+    const explicitEnglish = 
+      /^\/?(en|english)\b/i.test(incomingText) ||
+      /\b(speak|talk|reply|switch to|switch)\s+(in\s+)?english\b/i.test(incomingText);
+    const hasArabic = /[\u0600-\u06FF]/.test(incomingText);
+    const isEnglish = explicitEnglish || (!hasArabic && /[a-zA-Z]{3,}/.test(incomingText));
+
     const is6CharCode = incomingText.trim().match(/^\/?(start[\s=_]+)?([A-Za-z0-9]{6})$/i);
 
     // If user is ALREADY linked and sends a 6-character code:
@@ -144,7 +188,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ ok: true });
     }
 
-    // If NOT linked, check if user sent a valid sync code
+    // If NOT linked: Welcome new users, explain everything, and solve any question in guest mode
     if (!existingLink) {
       if (is6CharCode) {
         const code = is6CharCode[2].toUpperCase();
@@ -161,6 +205,9 @@ export async function POST(req: NextRequest) {
             fromNumber,
             '❌ كود الربط غير صحيح أو منتهي الصلاحية.\nInvalid or expired link code.\n\nمن فضلك افتح إعدادات TaskerBot واضغط "توليد رمز" جديد:\nhttps://taskerbot.vercel.app/dashboard/settings'
           );
+          if (messageId) {
+            reactWhatsAppMessage(fromNumber, messageId, '❌').catch(() => {});
+          }
           return NextResponse.json({ ok: true });
         }
 
@@ -178,23 +225,62 @@ export async function POST(req: NextRequest) {
 
         await sendWhatsAppReply(
           fromNumber,
-          '👋 مرحباً بك يا إسماعيل!\n' +
+          '👋 مرحباً بك يا بطل!\n' +
             'تم ربط رقم الواتساب بحسابك في TaskerBot بنجاح. Your WhatsApp is now connected to TaskerBot!\n\n' +
             'You can talk to me in English or Arabic anytime. Send me your schedule, homework, questions, or forward school group PDFs and images whenever you need help.'
         );
+        if (messageId) {
+          reactWhatsAppMessage(fromNumber, messageId, '✅').catch(() => {});
+        }
         return NextResponse.json({ ok: true });
       }
 
-      // Prompt to link
-      await sendWhatsAppReply(
-        fromNumber,
-        '👋 Welcome to TaskerBot / TSC AI — Your Smart School Assistant!\n' +
-          'مرحباً بك في TaskerBot / TSC AI المساعد المدرسي الذكي!\n\n' +
-          'To link your WhatsApp number to your account (لربط حسابك):\n' +
-          '1. Open Settings (افتح الإعدادات): https://taskerbot.vercel.app/dashboard/settings\n' +
-          '2. Tap "Generate Code" (اضغط توليد رمز)\n' +
-          '3. Send the 6-character code here to connect instantly!'
-      );
+      // Check if message is a simple greeting or general introductory ping
+      const isGreetingOnly =
+        !mediaPart &&
+        (/^\/?(hi|hello|hey|salam|start|help|\/start|\/help|سلام|السلام عليكم|الو|مين|مين معايا|اهلا|أهلا|ازيك|ازيك يا بوت|مساء الخير|صباح الخير)\b/i.test(
+          incomingText.trim()
+        ) ||
+          incomingText.trim().length <= 4);
+
+      if (isGreetingOnly) {
+        await sendWhatsAppReply(fromNumber, getNewUserGreeting(isEnglish));
+        if (messageId) {
+          reactWhatsAppMessage(fromNumber, messageId, '👋').catch(() => {});
+        }
+        return NextResponse.json({ ok: true });
+      }
+
+      // If new/unlinked user sends a real question, homework problem, image, or PDF:
+      // Answer it fully using Gemini in guest mode + include welcome header and linking footer
+      try {
+        const aiResponse = await processUserMessageWithAI({
+          text: incomingText,
+          mediaPart,
+          fileName,
+          languagePreference: isEnglish ? 'en' : 'ar',
+          userProfile: undefined,
+          databaseContext: '',
+          recentMessages: [],
+        });
+
+        const introHeader = isEnglish
+          ? '👋 Welcome to TaskerBot / TSC AI! (Your Smart School Companion)\n\n'
+          : '👋 أهلاً بك في TaskerBot / TSC AI! (مساعدك المدرسي الذكي)\n\n';
+
+        const linkFooter = isEnglish
+          ? '\n\n💡 Tip: To link this WhatsApp number to your web dashboard and sync your schedule, generate a code at: https://taskerbot.vercel.app/dashboard/settings'
+          : '\n\n💡 ملحوظة: لربط رقم الواتساب ده بحسابك على الموقع ومتابعة جدولك وواجباتك، ابعت رمز الربط من الإعدادات: https://taskerbot.vercel.app/dashboard/settings';
+
+        const fullReply = `${introHeader}${aiResponse.reply}${linkFooter}`;
+        await sendWhatsAppReply(fromNumber, fullReply);
+        if (messageId) {
+          reactWhatsAppMessage(fromNumber, messageId, '✅').catch(() => {});
+        }
+      } catch (aiErr) {
+        console.error('Error processing guest AI message on WhatsApp:', aiErr);
+        await sendWhatsAppReply(fromNumber, getNewUserGreeting(isEnglish));
+      }
       return NextResponse.json({ ok: true });
     }
 
@@ -229,12 +315,6 @@ export async function POST(req: NextRequest) {
     ]);
 
     const recentHistory = recentHistoryRes.data?.map((m: any) => ({ text: m.content, time: m.created_at })) || [];
-
-    const explicitEnglish = 
-      /^\/?(en|english)\b/i.test(incomingText) ||
-      /\b(speak|talk|reply|switch to|switch)\s+(in\s+)?english\b/i.test(incomingText);
-    const hasArabic = /[\u0600-\u06FF]/.test(incomingText);
-    const isEnglish = explicitEnglish || (!hasArabic && /[a-zA-Z]{3,}/.test(incomingText));
 
     // 4. Process with Gemini
     const aiResponse = await processUserMessageWithAI({
@@ -443,16 +523,27 @@ async function sendWhatsAppReply(to: string, text: string) {
             text: { body: chunk },
           }),
         });
-        if (!res.ok) {
-          const errJson = await res.text();
-          console.error('Meta WhatsApp send error:', errJson);
+          if (!res.ok) {
+            const errJson = await res.text();
+            console.error(`Meta WhatsApp send error (HTTP ${res.status}) to ${to}:`, errJson);
+            try {
+              const errObj = JSON.parse(errJson);
+              if (errObj?.error?.code === 131030) {
+                console.warn(
+                  `⚠️ [Meta WhatsApp Sandbox Restriction]: Phone number ${to} is not in your Meta allowed recipients list.\n` +
+                  `Go to developers.facebook.com -> WhatsApp -> API Setup -> "To" dropdown to add this number during development.`
+                );
+              }
+            } catch {}
+          } else {
+            console.log(`✅ [Meta WhatsApp Message Sent] to ${to}`);
+          }
+        } catch (err) {
+          console.error('Failed to send WhatsApp message via Meta API:', err);
         }
-      } catch (err) {
-        console.error('Failed to send WhatsApp message via Meta API:', err);
       }
+      return;
     }
-    return;
-  }
 
   // Option 2: Twilio WhatsApp API
   const twilioSid = process.env.TWILIO_ACCOUNT_SID;
