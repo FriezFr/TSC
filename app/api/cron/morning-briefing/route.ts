@@ -89,9 +89,10 @@ async function handleMorningBriefing(req: NextRequest) {
         });
 
         // Determine channel: Phone number (WhatsApp) vs Telegram Chat ID
-        const isPhone = /^\+?\d{10,15}$/.test(chatId.replace(/\D/g, ''));
+        const cleanDigits = chatId.replace(/\D/g, '');
+        const isWhatsApp = cleanDigits.startsWith('201') || (cleanDigits.startsWith('20') && cleanDigits.length === 12);
 
-        if (isPhone) {
+        if (isWhatsApp) {
           // WhatsApp Delivery with 3 Interactive Quick-Action Buttons
           const buttons = [
             { id: 'btn_what_to_study', title: '🧠 أذاكر إيه؟' },
