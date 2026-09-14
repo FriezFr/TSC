@@ -93,6 +93,16 @@ You have direct read & write access to Ismail's database! You can perform live m
      - Provide practical commands they can use anytime: Timetable management, Assignment tracking, "What should I study right now?", Photo & PDF solving, Mistake quiz, and Exam countdowns.
      - Always use clean plain text with simple bullet points and NO asterisks (*, **).
 
+10. GROUP CHATS, FORWARDED MESSAGES, & CHAT DUMPS:
+   - When the message comes from a group or is a dump of forwarded group messages (multiple people talking, timestamps, classmate banter, teacher announcements):
+     1. DO NOT TOUCH ISMAIL'S PERSONAL WEEKLY 7ESAS (TIMETABLE)! Ismail already has his fixed weekly schedule. If other students, parents, or teachers in the group talk about their classes, cancelations, or times, NEVER emit lesson_change, lesson_cancel, lesson_add, or schedule_import.
+     2. DO NOT CREATE PERSONAL ASSIGNMENTS from classmates chatting, asking questions (e.g. "مين معاه شيت؟", "حد حل السؤال ده؟", "مش فاهم"), or random peer talk.
+     3. If an official assignment or exam was announced by a teacher in the group:
+        - Summarize what the teacher announced cleanly.
+        - DO NOT automatically emit assignment_create or exam_create.
+        - Ask Ismail: "هل تحب أسجل الواجب ده في لوحة تحكمك؟"
+     4. Focus on summarizing key announcements, solving any questions asked directly to you, and keeping his personal dashboard clean.
+
 CRITICAL RULES FOR IMAGES, WORKSHEETS, & EXAMS:
 - When the student sends an image or document containing questions, exercises, or exam problems:
   1. Inspect the ENTIRE image thoroughly from top to bottom and left to right, including handwritten questions, sidebars, and separate sections.
@@ -158,6 +168,8 @@ export async function processUserMessageWithAI(options: {
   databaseContext?: string;
   recentMessages?: { text: string; time?: string }[];
   languagePreference?: 'en' | 'ar' | 'auto';
+  isGroupContext?: boolean;
+  isGroupDump?: boolean;
   userProfile?: {
     full_name?: string;
     study_division?: string;
@@ -174,6 +186,8 @@ export async function processUserMessageWithAI(options: {
     recentMessages,
     userProfile,
     languagePreference,
+    isGroupContext,
+    isGroupDump,
   } = options;
   const apiKey = process.env.GEMINI_API_KEY;
 
@@ -198,6 +212,14 @@ export async function processUserMessageWithAI(options: {
   ];
 
   let contextPrompt = SYSTEM_PROMPT;
+  if (isGroupContext || isGroupDump) {
+    contextPrompt += `\n\n🚨 CRITICAL GROUP CONTEXT / DUMP DETECTED:
+- This message is either from a group chat or is a pasted dump of messages from a school/class group.
+- DO NOT MODIFY ISMAIL'S PERSONAL WEEKLY TIMETABLE OR 7ESAS! (Ismail's classes are already confirmed and personal).
+- DO NOT emit lesson_change, lesson_add, lesson_cancel, or schedule_import.
+- DO NOT create personal assignments from peer conversations or questions between classmates.
+- If an official teacher announcement or homework was made, summarize it clearly in your response and ask Ismail if he wants to add it to his dashboard, without emitting automatic action tags.`;
+  }
   if (
     languagePreference === 'en' ||
     /^\/?(en|english)\b/i.test(text) ||

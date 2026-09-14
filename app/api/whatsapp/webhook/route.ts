@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getSupabaseAdminClient } from '@/lib/supabase/admin';
 import { processUserMessageWithAI } from '@/lib/gemini';
-import { executeBotActions, buildFullStudentContext, getTSCCommandsGuide } from '@/lib/bot-actions';
+import { executeBotActions, buildFullStudentContext, getTSCCommandsGuide, isGroupChatDump } from '@/lib/bot-actions';
 
 // Verify Token for Meta WhatsApp Cloud API
 const WHATSAPP_VERIFY_TOKEN = process.env.WHATSAPP_VERIFY_TOKEN || 'tsc_baccalaureate_whatsapp_2026';
@@ -140,6 +140,9 @@ export async function POST(req: NextRequest) {
       /\b(speak|talk|reply|switch to|switch)\s+(in\s+)?english\b/i.test(incomingText);
     const hasArabic = /[\u0600-\u06FF]/.test(incomingText);
     const isEnglish = explicitEnglish || (!hasArabic && /[a-zA-Z]/.test(incomingText));
+
+    const isGroup = fromNumber.includes('@g.us');
+    const isDump = isGroupChatDump(incomingText);
 
     const is6CharCode = incomingText.trim().match(/^\/?(start[\s=_]+)?([A-Za-z0-9]{6})$/i);
 
@@ -330,6 +333,8 @@ export async function POST(req: NextRequest) {
         userProfile: profile,
         databaseContext,
         recentMessages: recentHistory,
+        isGroupContext: isGroup,
+        isGroupDump: isDump,
       });
 
       // 5. Execute Dashboard Actions (Quizzes, Flashcards, Assignments, Deadlines, Exams, Timetable)
@@ -339,6 +344,8 @@ export async function POST(req: NextRequest) {
         const actionResult = await executeBotActions(supabase, userId, actionsToRun, {
           source: 'whatsapp',
           isEnglish,
+          isGroupContext: isGroup,
+          isGroupDump: isDump,
         });
         actionFeedback = actionResult.combinedFeedback;
       }

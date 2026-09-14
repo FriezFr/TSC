@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getSupabaseAdminClient } from '@/lib/supabase/admin';
 import { processUserMessageWithAI } from '@/lib/gemini';
-import { executeBotActions, buildFullStudentContext, getTSCCommandsGuide } from '@/lib/bot-actions';
+import { executeBotActions, buildFullStudentContext, getTSCCommandsGuide, isGroupChatDump } from '@/lib/bot-actions';
 
 interface TelegramPhoto {
   file_id: string;
@@ -53,6 +53,7 @@ interface TelegramUpdate {
     photo?: TelegramPhoto[];
     voice?: TelegramVoice;
     audio?: TelegramAudio;
+    reply_to_message?: any;
   };
 }
 
@@ -179,7 +180,24 @@ export async function POST(req: NextRequest) {
     }
 
     const chatId = message.chat.id;
+    const isGroup = message.chat.type === 'group' || message.chat.type === 'supergroup';
     const rawText = (message.text || message.caption || '').trim();
+
+    // In Telegram Groups: Only reply if the bot is explicitly mentioned, tagged, or replied to!
+    if (isGroup) {
+      const isBotMentioned =
+        rawText.includes('@TSCTaskerBot') ||
+        rawText.includes('@TSC') ||
+        rawText.startsWith('/') ||
+        message.reply_to_message?.from?.is_bot === true;
+
+      if (!isBotMentioned) {
+        // Silently ignore group banter so people can chat freely without bot interruption
+        return NextResponse.json({ ok: true, note: 'Ignored group message without bot mention' });
+      }
+    }
+
+    const isDump = isGroupChatDump(rawText);
 
     // Check Supabase admin client
     let supabase;
@@ -572,6 +590,8 @@ export async function POST(req: NextRequest) {
       userProfile: profile,
       databaseContext,
       recentMessages: recentHistory,
+      isGroupContext: isGroup,
+      isGroupDump: isDump,
     });
 
     // Execute detected bot actions
@@ -581,6 +601,8 @@ export async function POST(req: NextRequest) {
       const actionResult = await executeBotActions(supabase, userId, actionsToRun, {
         source: 'telegram',
         isEnglish,
+        isGroupContext: isGroup,
+        isGroupDump: isDump,
       });
       actionFeedback = actionResult.combinedFeedback;
     }

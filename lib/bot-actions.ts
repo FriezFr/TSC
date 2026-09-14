@@ -104,6 +104,8 @@ export async function executeBotActions(
   options: {
     source: 'whatsapp' | 'telegram' | 'web';
     isEnglish?: boolean;
+    isGroupContext?: boolean;
+    isGroupDump?: boolean;
   }
 ): Promise<BotExecutionResult> {
   const isEnglish = !!options.isEnglish;
@@ -126,6 +128,25 @@ export async function executeBotActions(
   for (const action of actions) {
     try {
       const type = action.type;
+
+      // Hard Guardrail: NEVER modify student's weekly 7esas (timetable) from a group chat or group chat dump!
+      if (
+        (options.isGroupContext || options.isGroupDump) &&
+        (type === 'lesson_change' || type === 'lesson_add' || type === 'lesson_cancel' || type === 'schedule_import')
+      ) {
+        console.log(`[Guardrail] Blocked ${type} from group context/dump to preserve student's personal weekly routine.`);
+        continue;
+      }
+
+      // Hard Guardrail: In group chats or dumps, do not create personal assignments from random chatter
+      if (
+        (options.isGroupContext || options.isGroupDump) &&
+        type === 'assignment_create' &&
+        !action.isConfirmedByStudent
+      ) {
+        console.log(`[Guardrail] Skipped unconfirmed assignment_create from group context/dump.`);
+        continue;
+      }
 
       // -------------------------------------------------------------
       // 1. FLASHCARDS & QUIZZES
@@ -1190,4 +1211,28 @@ export function getTSCCommandsGuide(options: {
 
   return guide;
 }
+
+/**
+ * Detects whether incoming text represents a forwarded group chat dump or multi-person discussion.
+ */
+export function isGroupChatDump(text: string = ''): boolean {
+  if (!text || text.length < 30) return false;
+  const lines = text.split('\n');
+  let timestampSenderCount = 0;
+  for (const line of lines) {
+    const trimmed = line.trim();
+    if (
+      /^\[?\d{1,2}[:/.-]\d{1,2}[:/.-]?\d{0,4}.*?\]?\s*[-:]?\s*[^:\n]{1,30}:/i.test(trimmed) ||
+      /^\[\d{1,2}:\d{2}(:\d{2})?\s*(AM|PM|am|pm)?\]\s*[^:\n]{1,30}:/i.test(trimmed) ||
+      /^\d{1,2}:\d{2}\s*[-–]\s*[^:\n]{1,30}:/i.test(trimmed)
+    ) {
+      timestampSenderCount++;
+    }
+  }
+
+  const hasGroupKeywords = /\b(جروب|الجروب|group|chat dump|شات الدفعة|شات السنتر|شات المدرسة|شات المستر|رسائل الجروب)\b/i.test(text);
+
+  return timestampSenderCount >= 2 || (hasGroupKeywords && lines.length >= 3);
+}
+
 
