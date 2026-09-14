@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getSupabaseAdminClient } from '@/lib/supabase/admin';
 import { processUserMessageWithAI } from '@/lib/gemini';
-import { executeBotActions, buildFullStudentContext } from '@/lib/bot-actions';
+import { executeBotActions, buildFullStudentContext, getTSCCommandsGuide } from '@/lib/bot-actions';
 
 export async function POST(req: NextRequest) {
   try {
@@ -34,6 +34,38 @@ export async function POST(req: NextRequest) {
 
     const hasArabic = /[\u0600-\u06FF]/.test(message);
     const isEnglish = !hasArabic && /[a-zA-Z]/.test(message);
+
+    const isExplicitCommandQuery =
+      /\b(help|commands|\/help|\/commands|\/start|start|أوامر|الاوامر|الأوامر|اوامر|اوامر البوت|بتعمل ايه|مين انت|عرفني بنفسك|شرح البوت|كيف استخدمك|طريقة الاستخدام|لوحة التحكم|dashboard)\b/i.test(
+        message.trim()
+      );
+
+    const isSimpleGreetingOnly =
+      /^\/?(yo|hi|hello|hey|sup|ازيك|ازيك يا بوت|سلام|السلام عليكم|الو|اهلا|أهلا|مساء الخير|صباح الخير|bruh)\b/i.test(
+        message.trim()
+      ) &&
+      message.trim().split(/\s+/).length <= 3;
+
+    if (isExplicitCommandQuery || isSimpleGreetingOnly) {
+      const guide = getTSCCommandsGuide({
+        isEnglish,
+        isLinked: true,
+        userName: profile?.full_name,
+      });
+
+      await supabase.from('chat_messages').insert({
+        user_id: userId,
+        role: 'assistant',
+        source: 'web',
+        content: guide,
+        media_type: 'text',
+      });
+
+      return NextResponse.json({
+        reply: guide,
+        actionResult: null,
+      });
+    }
 
     // 2. Process with Gemini
     const aiResponse = await processUserMessageWithAI({

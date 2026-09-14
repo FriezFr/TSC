@@ -1076,3 +1076,118 @@ ${noteLines.length > 0 ? noteLines.join('\n') : 'No recent notes.'}`;
     return '';
   }
 }
+
+/**
+ * Comprehensive guide explaining all Dashboard features and Voice/Chat commands in TSC.
+ * Clean plain text with NO asterisks (*, **).
+ */
+export function getTSCCommandsGuide(options: {
+  isEnglish: boolean;
+  isLinked: boolean;
+  userName?: string;
+}): string {
+  const { isEnglish, isLinked, userName } = options;
+  const firstName = userName ? userName.split(' ')[0] : '';
+
+  if (isEnglish) {
+    const greeting = firstName ? `👋 Welcome, ${firstName}!` : '👋 Welcome to TSC!';
+    let guide =
+      `${greeting} I am TSC (The Student Companion) — your Smart School Operating System for Thanaweya & Baccalaureate.\n\n` +
+      'Here is your complete guide to your Dashboard features and all the Voice/Chat Commands you can tell me anytime:\n\n' +
+      '📊 WHAT DOES YOUR DASHBOARD DO?\n' +
+      '• 📚 Timetable (الجدول): Organizes your weekly school lessons, private tutors, and study slots.\n' +
+      '• 📝 Assignments (الواجبات): Tracks all your homework, deadlines, and urgency priorities.\n' +
+      '• 🎯 Exams (الامتحانات): Live countdown to all your upcoming test dates.\n' +
+      '• 🗂️ Flashcards & Quizzes: Generates smart revision cards and mock exams from your notes and photos.\n' +
+      '• 🧠 AI Study Memory: Automatically tracks difficult topics and sign mistakes so you master them before exams.\n' +
+      '• ❌ Mistake Bank: Collects questions you previously missed so you can re-test yourself until 100% mastered.\n' +
+      '• ⏱️ Pomodoro Focus: Logs your genuine study blocks and focus cycles.\n' +
+      '• 📈 Grades & Notes: Records your report card scores and lecture takeaways.\n\n' +
+      '💬 VOICE & CHAT COMMANDS YOU CAN USE:\n' +
+      '1. TIMETABLE & CLASSES:\n' +
+      '• "What is my schedule this week?" / "قولي جدول الأسبوع" -> Shows your day-by-day classes and times.\n' +
+      '• "Add Physics lesson on Sunday at 8 PM" -> Adds a new class to your timetable.\n' +
+      '• "Move Math class to Saturday at 10 AM" -> Automatically reschedules a class.\n' +
+      '• "Cancel Arabic class tomorrow" -> Removes the lesson.\n\n' +
+      '2. HOMEWORK & ASSIGNMENTS:\n' +
+      '• "What tasks do I have today?" / "عليا إيه النهارده؟" -> Lists all pending homework due soon.\n' +
+      '• "Add Chemistry homework page 45 due Tuesday" -> Registers new assignment with deadline.\n' +
+      '• "I finished Math homework" / "خلصت واجب الماث" -> Marks it completed in your dashboard!\n' +
+      '• "Change English homework deadline to Thursday" -> Reschedules the due date.\n\n' +
+      '3. SMART STUDY ADVISOR:\n' +
+      '• "What should I study right now?" / "أذاكر إيه دلوقتي؟" -> Analyzes exams, pending tasks, and weak topics to give you ONE clear, decisive study action.\n' +
+      '• "Start focus session" / "ابدأ جلسة تركيز" -> Starts a focused study timer.\n\n' +
+      '4. PHOTOS, WORKSHEETS & PDF SCANNER:\n' +
+      '• Send ANY photo of a book, worksheet, or exam -> I solve and explain ALL questions step-by-step and create flashcards!\n' +
+      '• Forward ANY lecture PDF or document -> I summarize key takeaways and definitions.\n\n' +
+      '5. AI STUDY MEMORY & MISTAKE BANK:\n' +
+      '• "I keep messing up quadratic equations" -> Saves the weak topic to your AI Memory.\n' +
+      '• "Quiz me on my mistakes" / "امتحني في بنك أخطائي" -> Tests you on questions you previously got wrong.\n\n' +
+      '6. EXAMS & COUNTDOWN:\n' +
+      '• "Chemistry comprehensive exam on Sep 25" -> Adds exam countdown.\n' +
+      '• "What upcoming exams do I have?" -> Lists all scheduled tests.';
+
+    if (!isLinked) {
+      guide +=
+        '\n\n🔗 CONNECT YOUR WHATSAPP TO YOUR DASHBOARD:\n' +
+        '1. Open Settings: https://taskerbot.vercel.app/dashboard/settings\n' +
+        '2. Click "Generate Code"\n' +
+        '3. Send the 6-character code here to connect your schedule instantly!';
+    } else {
+      guide += '\n\n💡 What would you like to check or work on right now?';
+    }
+
+    return guide;
+  }
+
+  // Arabic version
+  const greeting = firstName ? `👋 مرحباً يا ${firstName}!` : '👋 أهلاً بك في TSC!';
+  let guide =
+    `${greeting} أنا رفيقك الدراسي الشامل ونظام التشغيل المدرسي الذكي للثانوية العامة والبكالوريا (TSC AI).\n\n` +
+    'إليك الدليل الكامل لكل أقسام لوحة التحكم (Dashboard) وأهم الأوامر الصوتية والنصية اللي تقدر تستخدمها:\n\n' +
+    '📊 أقسام لوحة التحكم (DASHBOARD) وبتعمل إيه:\n' +
+    '• 📚 الجدول الأسبوعي (Timetable): تنظيم كل حصصك المدرسية ودروسك الخاصة وأوقات المذاكرة يوم بيوم.\n' +
+    '• 📝 الواجبات والمهام (Assignments): متابعة كل الواجبات ومواعيد تسليمها مع تحديد الأولويات المهمة.\n' +
+    '• 🎯 الامتحانات (Exams): عد تنازلي لمواعيد امتحاناتك وجداول المراجعة الشاملة.\n' +
+    '• 🗂️ الفلاش كاردز والكويزات: بطاقات استذكار واختبارات تدريبية بتتولد تلقائياً من مذكراتك وأسئلتك.\n' +
+    '• 🧠 ذاكرة المذاكرة (AI Study Memory): بنسجل الدروس والمفاهيم اللي بتتلخبط فيها عشان نركز عليها قبل الامتحانات.\n' +
+    '• ❌ بنك الأخطاء (Mistake Bank): حفظ الأسئلة اللي غلطت فيها وإعادة التدريب عليها لحد ما تتقنها 100%.\n' +
+    '• ⏱️ جلسات التركيز وبومودورو (Pomodoro): حساب ساعات المذاكرة الصافية بدون تشتت.\n' +
+    '• 📈 الدرجات والملاحظات: تسجيل درجات الامتحانات والتلخيصات السريعة.\n\n' +
+    '💬 أهم الأوامر اللي تقدر تبعتهالي فويس أو شات:\n' +
+    '1. الجدول والحصص:\n' +
+    '• "قولي جدول الأسبوع كلو" -> بعرضلك جدولك بالتفصيل ومواعيد الحصص.\n' +
+    '• "ضيف حصة فيزيا الأحد الساعة 8 بالليل" -> بضيفها فوراً في جدولك.\n' +
+    '• "مستر محمد نقل حصة الماث للسبت الساعة 10 الصبح" -> بعدل الميعاد تلقائياً.\n' +
+    '• "الغي حصة العربي بكرة" -> بحذفها من الجدول.\n\n' +
+    '2. الواجبات والمهام:\n' +
+    '• "عليا إيه النهارده؟" أو "عليا إيه بكرة؟" -> بعرضلك كل الواجبات القريبة.\n' +
+    '• "عندي واجب كيمياء صفحة 30 تسليمه يوم الأربعاء" -> بسجله كواجب جديد.\n' +
+    '• "خلصت واجب الإنجليزي" -> بعلم عليه فوراً كـ تم الإنجاز في لوحة التحكم!\n' +
+    '• "أجل تسليم واجب الماث ليوم الخميس" -> بعدل ميعاد التسليم.\n\n' +
+    '3. المرشد الذكي وقرار المذاكرة:\n' +
+    '• "أذاكر إيه دلوقتي؟" (What should I study now?) -> بفحص امتحاناتك القريبة والواجبات ونقاط ضعفك وبديك قرار واحد واضح ومحدد تبدأ فيه حالاً.\n' +
+    '• "ابدأ جلسة تركيز" -> بدء تايمر بومودورو.\n\n' +
+    '4. حل وتلخيص الصور والـ PDF:\n' +
+    '• ابعت أي صورة لمسألة أو ورقة امتحان -> هحل كل الأسئلة خطوة بخطوة وأعملك منها كروت استذكار!\n' +
+    '• ابعت أي مذكرة أو ملخص PDF -> هلخصلك أهم القوانين والمفاهيم.\n\n' +
+    '5. ذاكرة المذاكرة وبنك الأخطاء:\n' +
+    '• "مش بعرف أحل مسائل المعايرة في الكيمياء" -> بسجلها فوراً كنقطة ضعف في ذاكرتك الدراسية.\n' +
+    '• "امتحني في بنك أخطائي" -> هطلعلك كويز سريع من أخطائك السابقة للتأكد من فهمها.\n\n' +
+    '6. الامتحانات والعد التنازلي:\n' +
+    '• "امتحان فيزياء شامل يوم 25 سبتمبر" -> بضيفه في عداد الامتحانات.\n' +
+    '• "إيه الامتحانات اللي قربت؟" -> بعرضلك قائمة الامتحانات القادمة.';
+
+  if (!isLinked) {
+    guide +=
+      '\n\n🔗 لو معاك حساب على الموقع وعاوز تربط رقمك وجدولك:\n' +
+      '1️⃣ افتح الإعدادات: https://taskerbot.vercel.app/dashboard/settings\n' +
+      '2️⃣ اضغط "توليد رمز" (Generate Code)\n' +
+      '3️⃣ ابعت الرمز المكون من 6 خانات هنا وهيتم ربط رقمك وجدولك فوراً!';
+  } else {
+    guide += '\n\n💡 حسابك مربوط وجاهز تماماً. تحب نبدأ بإيه أو نراجع إيه دلوقتي؟';
+  }
+
+  return guide;
+}
+

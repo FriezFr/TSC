@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getSupabaseAdminClient } from '@/lib/supabase/admin';
 import { processUserMessageWithAI } from '@/lib/gemini';
-import { executeBotActions, buildFullStudentContext } from '@/lib/bot-actions';
+import { executeBotActions, buildFullStudentContext, getTSCCommandsGuide } from '@/lib/bot-actions';
 
 // Verify Token for Meta WhatsApp Cloud API
 const WHATSAPP_VERIFY_TOKEN = process.env.WHATSAPP_VERIFY_TOKEN || 'tsc_baccalaureate_whatsapp_2026';
@@ -13,40 +13,7 @@ const linkedAccountsCache = new Map<string, { user_id: string; [key: string]: an
 
 // Comprehensive greeting and full explanation for new or unlinked phone numbers
 function getNewUserGreeting(isEnglish: boolean): string {
-  if (isEnglish) {
-    return (
-      '👋 Welcome to TSC — Your Smart School Operating System!\n\n' +
-      'I am your dedicated academic AI companion built specifically for the Egyptian Baccalaureate and Thanaweya (The Student Companion).\n\n' +
-      'Here is everything I can do for you:\n' +
-      '• 📚 Timetable & Schedule Optimization: Manage your weekly lessons, homework deadlines, and optimize daily study blocks.\n' +
-      '• ✍️ Step-by-Step Problem Solving: Ask me any question in Math, Physics, Chemistry, Biology, or Languages with full working.\n' +
-      '• 📄 Worksheet & PDF Scanner: Send photos of questions or PDF lecture notes — I read, solve, and summarize them instantly.\n' +
-      '• 🧠 AI Study Memory: Tracks your weak topics and recurring errors to prioritize them before exams.\n' +
-      '• 🎯 Mistake Bank & Mock Exams: Saves previous errors into a dedicated practice bank so you never repeat them.\n' +
-      '• ⏱️ Pomodoro Focus Tracking: Monitor genuine study time and focus cycles.\n\n' +
-      '🔗 If you are a student and want to link this number to your web account:\n' +
-      '1. Open your Dashboard: https://taskerbot.vercel.app/dashboard/settings\n' +
-      '2. Tap "Generate Code"\n' +
-      '3. Send your 6-character code here to connect your schedule instantly!\n\n' +
-      '💡 You can ask me any study question, send a problem, or attach a photo right now and I will solve it for you!'
-    );
-  }
-
-  return (
-    'أهلاً بك! 👋 أنا TSC — رفيقك الدراسي الشامل ونظام التشغيل المدرسي الذكي للثانوية العامة والبكالوريا المصرية (The Student Companion).\n\n' +
-    'أنا هنا عشان أسهل عليك المذاكرة وأرتب لك كل تفاصيل دراستك. دي أهم الحاجات اللي أقدر أعملها لك:\n\n' +
-    '📚 تنظيم جدول الحصص والمذاكرة: برتب مواعيد حصصك ودروسك وأوقات استذكار كل مادة بدون أي تعارض.\n' +
-    '✍️ حل وشرح المسائل خطوة بخطوة: اسألني في أي مادة (فيزياء، رياضيات، كيمياء، أحياء، لغات، تاريخ...) وهشرحلك طريقة الحل والفكرة وراها.\n' +
-    '📄 قراءة الصور ومذكرات الـ PDF: صور أي مسألة من كتاب أو ملخص PDF وهحله وألخص أفكاره فوراً.\n' +
-    '🧠 ذاكرة المذاكرة ونقاط الضعف: بنسجل المواضيع اللي بتتلخبط فيها وبنراجعها معاك قبل الامتحانات.\n' +
-    '🎯 بنك الأخطاء والامتحانات التجريبية: بنجمع أخطاءك السابقة في بنك مخصص ونعمل عليها تدريبات عشان ماتكررهاش.\n' +
-    '⏱️ جلسات التركيز وبومودورو: متابعة ساعات المذاكرة الصافية.\n\n' +
-    '🔗 لو أنت طالب ومعاك حساب على المنصة وعاوز تربط رقمك ده:\n' +
-    '1️⃣ ادخل على إعدادات حسابك في الموقع: https://taskerbot.vercel.app/dashboard/settings\n' +
-    '2️⃣ اضغط على "توليد رمز" (Generate Code)\n' +
-    '3️⃣ ابعت الرمز المكون من 6 خانات هنا وهيتم ربط رقمك وجدولك فوراً!\n\n' +
-    '💡 تقدر تسألني أو تبعتلي أي مسألة أو سؤال دلوقتي فوراً وهجاوبك وأساعدك!'
-  );
+  return getTSCCommandsGuide({ isEnglish, isLinked: false });
 }
 
 /**
@@ -315,6 +282,42 @@ export async function POST(req: NextRequest) {
     ]);
 
     const recentHistory = recentHistoryRes.data?.map((m: any) => ({ text: m.content, time: m.created_at })) || [];
+
+    // Check if linked student sent a greeting (e.g. "yo", "hi", "bruh", "ازيك") or is asking for commands / dashboard features
+    const isExplicitCommandQuery =
+      !mediaPart &&
+      /\b(help|commands|\/help|\/commands|أوامر|الاوامر|الأوامر|اوامر|اوامر البوت|بتعمل ايه|مين انت|عرفني بنفسك|شرح البوت|كيف استخدمك|طريقة الاستخدام|لوحة التحكم|dashboard)\b/i.test(
+        incomingText.trim()
+      );
+
+    const isSimpleGreetingOnly =
+      !mediaPart &&
+      /^\/?(yo|hi|hello|hey|sup|start|\/start|ازيك|ازيك يا بوت|سلام|السلام عليكم|الو|اهلا|أهلا|مساء الخير|صباح الخير|bruh)\b/i.test(
+        incomingText.trim()
+      ) &&
+      incomingText.trim().split(/\s+/).length <= 3;
+
+    if (isExplicitCommandQuery || isSimpleGreetingOnly) {
+      const guide = getTSCCommandsGuide({
+        isEnglish,
+        isLinked: true,
+        userName: profile?.full_name,
+      });
+
+      await supabase.from('chat_messages').insert({
+        user_id: userId,
+        role: 'assistant',
+        source: 'whatsapp',
+        content: guide,
+        media_type: 'text',
+      });
+
+      await sendWhatsAppReply(fromNumber, guide);
+      if (messageId && fromNumber) {
+        reactWhatsAppMessage(fromNumber, messageId, '⚡').catch(() => {});
+      }
+      return NextResponse.json({ ok: true });
+    }
 
     // 4. Process with Gemini
     let finalReply = '';

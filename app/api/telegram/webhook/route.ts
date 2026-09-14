@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getSupabaseAdminClient } from '@/lib/supabase/admin';
 import { processUserMessageWithAI } from '@/lib/gemini';
-import { executeBotActions, buildFullStudentContext } from '@/lib/bot-actions';
+import { executeBotActions, buildFullStudentContext, getTSCCommandsGuide } from '@/lib/bot-actions';
 
 interface TelegramPhoto {
   file_id: string;
@@ -73,40 +73,7 @@ async function sendChatAction(chatId: number, action: 'typing' | 'upload_documen
 
 // Comprehensive greeting and full explanation for new or unlinked Telegram accounts
 function getNewUserGreeting(isEnglish: boolean): string {
-  if (isEnglish) {
-    return (
-      '👋 Welcome to TSC — Your Smart School Operating System!\n\n' +
-      'I am your dedicated academic AI companion built specifically for the Egyptian Baccalaureate and Thanaweya (The Student Companion).\n\n' +
-      'Here is everything I can do for you:\n' +
-      '• 📚 Timetable & Schedule Optimization: Manage your weekly lessons, homework deadlines, and optimize daily study blocks.\n' +
-      '• ✍️ Step-by-Step Problem Solving: Ask me any question in Math, Physics, Chemistry, Biology, or Languages with full working.\n' +
-      '• 📄 Worksheet & PDF Scanner: Send photos of questions or PDF lecture notes — I read, solve, and summarize them instantly.\n' +
-      '• 🧠 AI Study Memory: Tracks your weak topics and recurring errors to prioritize them before exams.\n' +
-      '• 🎯 Mistake Bank & Mock Exams: Saves previous errors into a dedicated practice bank so you never repeat them.\n' +
-      '• ⏱️ Pomodoro Focus Tracking: Monitor genuine study time and focus cycles.\n\n' +
-      '🔗 If you are a student and want to link this Telegram account to your web dashboard:\n' +
-      '1. Open your Dashboard: https://taskerbot.vercel.app/dashboard/settings\n' +
-      '2. Tap "Generate Code"\n' +
-      '3. Send `/start YOUR_CODE` here to connect your schedule instantly!\n\n' +
-      '💡 You can ask me any study question, send a problem, or attach a photo right now and I will solve it for you!'
-    );
-  }
-
-  return (
-    'أهلاً بك! 👋 أنا TSC — رفيقك الدراسي الشامل ونظام التشغيل المدرسي الذكي للثانوية العامة والبكالوريا المصرية (The Student Companion).\n\n' +
-    'أنا هنا عشان أسهل عليك المذاكرة وأرتب لك كل تفاصيل دراستك. دي أهم الحاجات اللي أقدر أعملها لك:\n\n' +
-    '📚 تنظيم جدول الحصص والمذاكرة: برتب مواعيد حصصك ودروسك وأوقات استذكار كل مادة بدون أي تعارض.\n' +
-    '✍️ حل وشرح المسائل خطوة بخطوة: اسألني في أي مادة (فيزياء، رياضيات، كيمياء، أحياء، لغات، تاريخ...) وهشرحلك طريقة الحل والفكرة وراها.\n' +
-    '📄 قراءة الصور ومذكرات الـ PDF: صور أي مسألة من كتاب أو ملخص PDF وهحله وألخص أفكاره فوراً.\n' +
-    '🧠 ذاكرة المذاكرة ونقاط الضعف: بنسجل المواضيع اللي بتتلخبط فيها وبنراجعها معاك قبل الامتحانات.\n' +
-    '🎯 بنك الأخطاء والامتحانات التجريبية: بنجمع أخطاءك السابقة في بنك مخصص ونعمل عليها تدريبات عشان ماتكررهاش.\n' +
-    '⏱️ جلسات التركيز وبومودورو: متابعة ساعات المذاكرة الصافية.\n\n' +
-    '🔗 لو أنت طالب ومعاك حساب على المنصة وعاوز تربط حساب التليجرام ده بحسابك:\n' +
-    '1️⃣ ادخل على إعدادات حسابك في الموقع: https://taskerbot.vercel.app/dashboard/settings\n' +
-    '2️⃣ اضغط على "توليد رمز" (Generate Code)\n' +
-    '3️⃣ ابعت `/start الرمز` هنا وهيتم ربط حسابك وجدولك فوراً!\n\n' +
-    '💡 تقدر تسألني أو تبعتلي أي مسألة أو سؤال دلوقتي فوراً وهجاوبك وأساعدك!'
-  );
+  return getTSCCommandsGuide({ isEnglish, isLinked: false });
 }
 
 // Clean text for Telegram: strip all asterisks and markdown headers so text is pure, normal human font
@@ -543,16 +510,24 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ ok: true });
     }
 
-    // Case D: User sent Plain Text or Question or /start
-    if (rawText.toLowerCase() === '/start' || rawText.toLowerCase() === 'start') {
-      const greeting =
-        `👋 مرحباً ${profile?.full_name ? profile.full_name.split(' ')[0] : 'يا بطل'}!\n\n` +
-        'أنا مساعدك الذكي في البكالوريا المصرية (TSC AI) 🤖\n\n' +
-        '• اسألني أي سؤال في موادك (فيزياء، كيمياء، أحياء، رياضيات، إلخ).\n' +
-        '• ضيف كويز أو فلاش كاردز في أي وقت (مثلاً: "اعمل كويز 5 أسئلة في الكيمياء").\n' +
-        '• سجل واجباتك وعدل مواعيد التسليم أو علم عليها كمنتهية (مثلاً: "خلصت واجب الماث").\n' +
-        '• ابعتلي أي ملف PDF أو صورة مسألة وهحلها وألخصهالك فوراً.\n\n' +
-        'قولي، بتذاكر إيه النهاردة؟';
+    // Case D: User sent greeting, /start, /help, commands inquiry, or question
+    const isExplicitCommandQuery =
+      /\b(help|commands|\/help|\/commands|\/start|start|أوامر|الاوامر|الأوامر|اوامر|اوامر البوت|بتعمل ايه|مين انت|عرفني بنفسك|شرح البوت|كيف استخدمك|طريقة الاستخدام|لوحة التحكم|dashboard)\b/i.test(
+        rawText.trim()
+      );
+
+    const isSimpleGreetingOnly =
+      /^\/?(yo|hi|hello|hey|sup|ازيك|ازيك يا بوت|سلام|السلام عليكم|الو|اهلا|أهلا|مساء الخير|صباح الخير|bruh)\b/i.test(
+        rawText.trim()
+      ) &&
+      rawText.trim().split(/\s+/).length <= 3;
+
+    if (isExplicitCommandQuery || isSimpleGreetingOnly) {
+      const guide = getTSCCommandsGuide({
+        isEnglish,
+        isLinked: true,
+        userName: profile?.full_name,
+      });
 
       await recordChatMessage(supabase, {
         userId,
@@ -563,10 +538,10 @@ export async function POST(req: NextRequest) {
       await recordChatMessage(supabase, {
         userId,
         role: 'assistant',
-        content: greeting,
+        content: guide,
       });
 
-      await sendTelegramReply(chatId, greeting);
+      await sendTelegramReply(chatId, guide);
       return NextResponse.json({ ok: true });
     }
 
