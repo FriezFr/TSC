@@ -241,6 +241,7 @@ export type MessageClassification =
   | 'REMINDER'
   | 'SCHEDULE_QUERY'
   | 'SCHEDULE_IMPORT'
+  | 'FLASHCARD_CREATE'
   | 'PLAN_MY_DAY_QUERY'
   | 'IRRELEVANT'
   | 'UNKNOWN';

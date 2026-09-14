@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getSupabaseAdminClient } from '@/lib/supabase/admin';
 import { processUserMessageWithAI } from '@/lib/gemini';
+import { executeBotActions, buildFullStudentContext } from '@/lib/bot-actions';
 
 // Verify Token for Meta WhatsApp Cloud API
 const WHATSAPP_VERIFY_TOKEN = process.env.WHATSAPP_VERIFY_TOKEN || 'tsc_baccalaureate_whatsapp_2026';
@@ -208,7 +209,7 @@ export async function POST(req: NextRequest) {
 
     // 3. Parallelize User Message Logging & Context Fetching
     const threeMinAgo = new Date(Date.now() - 3 * 60 * 1000).toISOString();
-    const [, recentHistoryRes, timetableRes, pendingTasksRes, recentNotesRes] = await Promise.all([
+    const [, recentHistoryRes, databaseContext] = await Promise.all([
       supabase.from('chat_messages').insert({
         user_id: userId,
         role: 'user',
@@ -224,17 +225,10 @@ export async function POST(req: NextRequest) {
         .gte('created_at', threeMinAgo)
         .order('created_at', { ascending: true })
         .limit(4),
-      supabase.from('timetable').select('*').eq('user_id', userId),
-      supabase.from('assignments').select('*').eq('user_id', userId).eq('is_completed', false).limit(10),
-      supabase.from('notes').select('content').eq('user_id', userId).order('created_at', { ascending: false }).limit(2),
+      buildFullStudentContext(supabase, userId),
     ]);
 
     const recentHistory = recentHistoryRes.data?.map((m: any) => ({ text: m.content, time: m.created_at })) || [];
-    const timetableSlots = timetableRes.data || [];
-    const pendingTasks = pendingTasksRes.data || [];
-
-    const scheduleContext = buildScheduleContext(timetableSlots, pendingTasks);
-    const recentNotes = recentNotesRes.data?.map((n: any) => n.content).join('\n---\n');
 
     const explicitEnglish = 
       /^\/?(en|english)\b/i.test(incomingText) ||
@@ -242,22 +236,26 @@ export async function POST(req: NextRequest) {
     const hasArabic = /[\u0600-\u06FF]/.test(incomingText);
     const isEnglish = explicitEnglish || (!hasArabic && /[a-zA-Z]{3,}/.test(incomingText));
 
-    // 5. Process with Gemini
+    // 4. Process with Gemini
     const aiResponse = await processUserMessageWithAI({
       text: incomingText,
       mediaPart,
       fileName,
       languagePreference: isEnglish ? 'en' : 'ar',
       userProfile: profile,
-      scheduleContext,
+      databaseContext,
       recentMessages: recentHistory,
-      recentContext: recentNotes || undefined,
     });
 
-    // 6. Execute Dashboard Action if actionable and confidence >= 0.70
+    // 5. Execute Dashboard Actions (Quizzes, Flashcards, Assignments, Deadlines, Exams, Timetable)
     let actionFeedback = '';
-    if (aiResponse.action && (aiResponse.confidence ?? 1.0) >= 0.7) {
-      actionFeedback = await executeWhatsAppAction(supabase, userId, aiResponse.action, isEnglish);
+    const actionsToRun = aiResponse.actions?.length ? aiResponse.actions : aiResponse.action;
+    if (actionsToRun) {
+      const actionResult = await executeBotActions(supabase, userId, actionsToRun, {
+        source: 'whatsapp',
+        isEnglish,
+      });
+      actionFeedback = actionResult.combinedFeedback;
     }
 
     let finalReply = aiResponse.reply;
@@ -265,7 +263,7 @@ export async function POST(req: NextRequest) {
       finalReply += `\n\n${actionFeedback}`;
     }
 
-    // 7. Record Assistant Reply
+    // 6. Record Assistant Reply
     await supabase.from('chat_messages').insert({
       user_id: userId,
       role: 'assistant',
@@ -274,10 +272,10 @@ export async function POST(req: NextRequest) {
       media_type: 'text',
     });
 
-    // 8. Send WhatsApp Reply back to student
+    // 7. Send WhatsApp Reply back to student
     await sendWhatsAppReply(fromNumber, finalReply);
 
-    // 9. Update reaction to checkmark
+    // 8. Update reaction to checkmark
     if (messageId && fromNumber) {
       reactWhatsAppMessage(fromNumber, messageId, '✅').catch(() => {});
     }
@@ -287,251 +285,6 @@ export async function POST(req: NextRequest) {
     console.error('Error processing WhatsApp webhook:', err);
     return NextResponse.json({ error: 'Internal error' }, { status: 500 });
   }
-}
-
-async function executeWhatsAppAction(supabase: any, userId: string, action: any, isEnglish: boolean = false): Promise<string> {
-  if (!action || !action.type) return '';
-
-  try {
-    const today = new Date().toISOString().split('T')[0];
-    const data = action.data || action;
-
-    // 0. FULL SCHEDULE IMPORT / ROUTINE UPDATE
-    if (action.type === 'schedule_import') {
-      const lessons = Array.isArray(data.lessons) ? data.lessons : [];
-      const assignments = Array.isArray(data.assignments) ? data.assignments : [];
-
-      if (data.replaceExisting !== false) {
-        await supabase.from('timetable').delete().eq('user_id', userId);
-      }
-
-      const rowsToInsert = lessons.map((l: any) => ({
-        user_id: userId,
-        subject: l.subject || 'General',
-        day_of_week: typeof l.dayIndex === 'number' ? l.dayIndex : 0,
-        start_time: l.startTime || '08:00',
-        end_time: l.endTime || '09:30',
-        room_or_teacher: l.room_or_teacher || l.notes || 'Weekly Routine',
-      }));
-
-      if (rowsToInsert.length > 0) {
-        await supabase.from('timetable').insert(rowsToInsert);
-      }
-
-      if (assignments.length > 0) {
-        const hwRows = assignments.map((a: any) => ({
-          user_id: userId,
-          title: a.title || 'Homework',
-          subject: a.subject || 'General',
-          due_date: a.date || a.due_date || today,
-          priority: a.priority || 'medium',
-          is_completed: false,
-        }));
-        await supabase.from('assignments').insert(hwRows);
-      }
-
-      await supabase.from('ai_activity_logs').insert({
-        user_id: userId,
-        action_type: 'UPDATE_LESSON',
-        title: 'Import Weekly Routine',
-        description: `Imported ${rowsToInsert.length} classes and ${assignments.length} assignments`,
-        source: 'whatsapp',
-      });
-
-      return isEnglish
-        ? `✅ Updated your weekly timetable with ${rowsToInsert.length} classes and registered your weekly homework tasks!`
-        : `✅ تم تحديث وتثبيت جدولك الأسبوعي الجديد (${rowsToInsert.length} حصة) وتسجيل الواجبات في نظام TaskerBot!`;
-    }
-
-    // A. LESSON CHANGE / RESCHEDULE
-    if (action.type === 'lesson_change') {
-      const subject = data.subject || 'General';
-      const dayIndex = typeof data.dayIndex === 'number' ? data.dayIndex : 0;
-      const startTime = data.startTime || '08:00';
-      const endTime = data.endTime || '09:30';
-
-      const { data: existingSlots } = await supabase
-        .from('timetable')
-        .select('*')
-        .eq('user_id', userId)
-        .ilike('subject', subject);
-
-      const targetSlot = existingSlots?.[0];
-
-      if (targetSlot) {
-        await supabase
-          .from('timetable')
-          .update({
-            day_of_week: dayIndex,
-            start_time: startTime,
-            end_time: endTime,
-          })
-          .eq('id', targetSlot.id);
-
-        await supabase.from('ai_activity_logs').insert({
-          user_id: userId,
-          action_type: 'UPDATE_LESSON',
-          title: `تعديل موعد حصة ${subject}`,
-          description: `تم نقل الموعد ليوم ${data.dayName || dayIndex} الساعة ${startTime}`,
-          source: 'whatsapp',
-          target_id: targetSlot.id,
-          target_table: 'timetable',
-          previous_state: targetSlot,
-        });
-
-        return isEnglish
-          ? `🔄 Rescheduled ${subject} class in your timetable!`
-          : `🔄 تم تعديل موعد حصة ${subject} في جدولك!`;
-      } else {
-        const { data: newSlot } = await supabase
-          .from('timetable')
-          .insert({
-            user_id: userId,
-            subject,
-            day_of_week: dayIndex,
-            start_time: startTime,
-            end_time: endTime,
-          })
-          .select('*')
-          .single();
-
-        await supabase.from('ai_activity_logs').insert({
-          user_id: userId,
-          action_type: 'UPDATE_LESSON',
-          title: `إضافة حصة ${subject}`,
-          description: `يوم ${data.dayName || dayIndex} الساعة ${startTime}`,
-          source: 'whatsapp',
-          target_id: newSlot?.id,
-          target_table: 'timetable',
-          previous_state: null,
-        });
-
-        return isEnglish
-          ? `✓ Added ${subject} class to your timetable!`
-          : `✓ تم إضافة حصة ${subject} لجدولك!`;
-      }
-    }
-
-    // B. LESSON CANCELLED
-    if (action.type === 'lesson_cancel') {
-      const subject = data.subject || 'General';
-      const { data: existingSlots } = await supabase
-        .from('timetable')
-        .select('*')
-        .eq('user_id', userId)
-        .ilike('subject', subject);
-
-      const targetSlot = existingSlots?.[0];
-      if (targetSlot) {
-        await supabase.from('timetable').delete().eq('id', targetSlot.id);
-
-        await supabase.from('ai_activity_logs').insert({
-          user_id: userId,
-          action_type: 'CANCEL_LESSON',
-          title: `إلغاء حصة ${subject}`,
-          description: `تم حذف الحصة بناءً على رسالة مجموعة المدرسة`,
-          source: 'whatsapp',
-          target_id: targetSlot.id,
-          target_table: 'timetable',
-          previous_state: targetSlot,
-        });
-
-        return isEnglish
-          ? `✓ Cancelled ${subject} lesson and removed it from your timetable.`
-          : `✓ تم تسجيل إلغاء حصة ${subject} وحذفها من الجدول.`;
-      }
-      return '';
-    }
-
-    // C. HOMEWORK / ASSIGNMENT
-    if (action.type === 'assignment') {
-      const title = data.title || 'Homework';
-      const subject = data.subject || 'General';
-      const dueDate = data.date || today;
-
-      const { data: existingA } = await supabase
-        .from('assignments')
-        .select('*')
-        .eq('user_id', userId)
-        .ilike('title', title)
-        .ilike('subject', subject)
-        .maybeSingle();
-
-      if (existingA) {
-        await supabase
-          .from('assignments')
-          .update({ due_date: dueDate })
-          .eq('id', existingA.id);
-
-        return isEnglish
-          ? `🔄 Updated ${title} due date to ${dueDate}.`
-          : `🔄 تم تحديث موعد تسليم ${title} إلى ${dueDate}.`;
-      }
-
-      const { data: newAssignment } = await supabase
-        .from('assignments')
-        .insert({
-          user_id: userId,
-          title,
-          subject,
-          due_date: dueDate,
-          priority: data.priority || 'medium',
-          is_completed: false,
-        })
-        .select('*')
-        .single();
-
-      await supabase.from('ai_activity_logs').insert({
-        user_id: userId,
-        action_type: 'CREATE_TASK',
-        title: `إضافة واجب: ${title}`,
-        description: `المادة: ${subject} • موعد التسليم: ${dueDate}`,
-        source: 'whatsapp',
-        target_id: newAssignment?.id,
-        target_table: 'assignments',
-        previous_state: null,
-      });
-
-      return isEnglish
-        ? `✓ Added homework to your schedule (Due: ${dueDate}).`
-        : `✓ تم تسجيل الواجب في جدولك (تسليم: ${dueDate}).`;
-    }
-
-    // D. EXAM
-    if (action.type === 'exam') {
-      const subject = data.subject || 'General';
-      const examDate = data.date || today;
-
-      const { data: newExam } = await supabase
-        .from('exams')
-        .insert({
-          user_id: userId,
-          subject,
-          exam_date: examDate,
-          notes: data.title || undefined,
-        })
-        .select('*')
-        .single();
-
-      await supabase.from('ai_activity_logs').insert({
-        user_id: userId,
-        action_type: 'CREATE_TASK',
-        title: `تسجيل امتحان ${subject}`,
-        description: `الموعد: ${examDate}`,
-        source: 'whatsapp',
-        target_id: newExam?.id,
-        target_table: 'exams',
-        previous_state: null,
-      });
-
-      return isEnglish
-        ? `📅 Scheduled ${subject} exam on ${examDate}.`
-        : `📅 تم تسجيل امتحان ${subject} يوم ${examDate}.`;
-    }
-  } catch (err) {
-    console.error('Error executing WhatsApp action:', err);
-  }
-  return '';
 }
 
 // Build a clean, organized, day-by-day weekly timetable for Gemini
@@ -735,47 +488,6 @@ async function sendWhatsAppReply(to: string, text: string) {
   }
 
   console.log(`[WhatsApp Local / Mock Reply to ${to}]: ${formattedText}`);
-}
-
-async function executeAction(supabase: any, userId: string, action: any) {
-  if (!action || !action.type) return;
-
-  try {
-    const today = new Date().toISOString().split('T')[0];
-    const data = action.data || action;
-
-    if (action.type === 'assignment') {
-      await supabase.from('assignments').insert({
-        user_id: userId,
-        title: data.title || 'Homework',
-        subject: data.subject || 'General',
-        due_date: data.date || today,
-        priority: 'medium',
-        is_completed: false,
-      });
-    } else if (action.type === 'exam') {
-      await supabase.from('exams').insert({
-        user_id: userId,
-        subject: data.subject || 'General',
-        exam_date: data.date || today,
-        notes: data.title || undefined,
-      });
-    } else if (action.type === 'grade') {
-      const score = Number(data.score) || 0;
-      const maxScore = Number(data.max_score) || 60;
-      await supabase.from('grades').insert({
-        user_id: userId,
-        subject: data.subject || 'General',
-        title: data.title || `WhatsApp Log (${today})`,
-        score,
-        max_score: maxScore,
-        weight: 1.0,
-        date: today,
-      });
-    }
-  } catch (err) {
-    console.error('Error executing dashboard action in WhatsApp webhook:', err);
-  }
 }
 
 // Download WhatsApp Media (PDFs, Images, Audio) via Meta Graph API

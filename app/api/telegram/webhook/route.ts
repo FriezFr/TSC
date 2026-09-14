@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getSupabaseAdminClient } from '@/lib/supabase/admin';
 import { processUserMessageWithAI } from '@/lib/gemini';
+import { executeBotActions, buildFullStudentContext } from '@/lib/bot-actions';
 
 interface TelegramPhoto {
   file_id: string;
@@ -271,6 +272,16 @@ export async function POST(req: NextRequest) {
     // Trigger typing action
     await sendChatAction(chatId, message.document ? 'upload_document' : 'typing');
 
+    // Language detection
+    const explicitEnglish =
+      /^\/?(en|english)\b/i.test(rawText) ||
+      /\b(speak|talk|reply|switch to|switch)\s+(in\s+)?english\b/i.test(rawText);
+    const hasArabic = /[\u0600-\u06FF]/.test(rawText);
+    const isEnglish = explicitEnglish || (!hasArabic && /[a-zA-Z]{3,}/.test(rawText));
+
+    // Fetch full active database context (timetable, assignments, exams, flashcard decks, notes)
+    const databaseContext = await buildFullStudentContext(supabase, userId);
+
     // Case A: User sent a Document (e.g. PDF file like "Ch 1 L 1_2027.pdf")
     if (message.document) {
       const doc = message.document;
@@ -297,23 +308,41 @@ export async function POST(req: NextRequest) {
           mimeType,
           data: downloaded.buffer.toString('base64'),
         },
+        languagePreference: isEnglish ? 'en' : 'ar',
         userProfile: profile,
+        databaseContext,
       });
 
-      // Save as note in user's dashboard
+      // Execute detected actions (e.g. create quiz/flashcards, add assignment)
+      let actionFeedback = '';
+      const actionsToRun = aiResponse.actions?.length ? aiResponse.actions : aiResponse.action;
+      if (actionsToRun) {
+        const actionResult = await executeBotActions(supabase, userId, actionsToRun, {
+          source: 'telegram',
+          isEnglish,
+        });
+        actionFeedback = actionResult.combinedFeedback;
+      }
+
+      // Save as study note in user's dashboard
       await supabase.from('notes').insert({
         user_id: userId,
         content: `📁 ${doc.file_name || 'Document'}\n\n${aiResponse.reply}`,
         tags: ['Document', 'PDF', 'AI-Summary'],
       });
 
+      let finalReply = aiResponse.reply;
+      if (actionFeedback) {
+        finalReply += `\n\n${actionFeedback}`;
+      }
+
       await recordChatMessage(supabase, {
         userId,
         role: 'assistant',
-        content: aiResponse.reply,
+        content: finalReply,
       });
 
-      await sendTelegramReply(chatId, aiResponse.reply);
+      await sendTelegramReply(chatId, finalReply);
       return NextResponse.json({ ok: true });
     }
 
@@ -340,16 +369,34 @@ export async function POST(req: NextRequest) {
           mimeType: 'image/jpeg',
           data: downloaded.buffer.toString('base64'),
         },
+        languagePreference: isEnglish ? 'en' : 'ar',
         userProfile: profile,
+        databaseContext,
       });
+
+      // Execute detected actions (e.g. solve and add quiz/flashcards)
+      let actionFeedback = '';
+      const actionsToRun = aiResponse.actions?.length ? aiResponse.actions : aiResponse.action;
+      if (actionsToRun) {
+        const actionResult = await executeBotActions(supabase, userId, actionsToRun, {
+          source: 'telegram',
+          isEnglish,
+        });
+        actionFeedback = actionResult.combinedFeedback;
+      }
+
+      let finalReply = aiResponse.reply;
+      if (actionFeedback) {
+        finalReply += `\n\n${actionFeedback}`;
+      }
 
       await recordChatMessage(supabase, {
         userId,
         role: 'assistant',
-        content: aiResponse.reply,
+        content: finalReply,
       });
 
-      await sendTelegramReply(chatId, aiResponse.reply);
+      await sendTelegramReply(chatId, finalReply);
       return NextResponse.json({ ok: true });
     }
 
@@ -377,21 +424,33 @@ export async function POST(req: NextRequest) {
           mimeType,
           data: downloaded.buffer.toString('base64'),
         },
+        languagePreference: isEnglish ? 'en' : 'ar',
         userProfile: profile,
+        databaseContext,
       });
 
-      // If voice message asked to log something
-      if (aiResponse.action) {
-        await executeDashboardAction(supabase, userId, aiResponse.action);
+      let actionFeedback = '';
+      const actionsToRun = aiResponse.actions?.length ? aiResponse.actions : aiResponse.action;
+      if (actionsToRun) {
+        const actionResult = await executeBotActions(supabase, userId, actionsToRun, {
+          source: 'telegram',
+          isEnglish,
+        });
+        actionFeedback = actionResult.combinedFeedback;
+      }
+
+      let finalReply = aiResponse.reply;
+      if (actionFeedback) {
+        finalReply += `\n\n${actionFeedback}`;
       }
 
       await recordChatMessage(supabase, {
         userId,
         role: 'assistant',
-        content: aiResponse.reply,
+        content: finalReply,
       });
 
-      await sendTelegramReply(chatId, aiResponse.reply);
+      await sendTelegramReply(chatId, finalReply);
       return NextResponse.json({ ok: true });
     }
 
@@ -401,8 +460,9 @@ export async function POST(req: NextRequest) {
         `👋 مرحباً ${profile?.full_name ? profile.full_name.split(' ')[0] : 'يا بطل'}!\n\n` +
         'أنا مساعدك الذكي في البكالوريا المصرية (TSC AI) 🤖\n\n' +
         '• اسألني أي سؤال في موادك (فيزياء، كيمياء، أحياء، رياضيات، إلخ).\n' +
-        '• ابعتلي أي ملف PDF أو صورة مسألة وهشرحهالك وألخصهالك فوراً.\n' +
-        '• سجل واجباتك وامتحاناتك ودرجاتك في أي وقت.\n\n' +
+        '• ضيف كويز أو فلاش كاردز في أي وقت (مثلاً: "اعمل كويز 5 أسئلة في الكيمياء").\n' +
+        '• سجل واجباتك وعدل مواعيد التسليم أو علم عليها كمنتهية (مثلاً: "خلصت واجب الماث").\n' +
+        '• ابعتلي أي ملف PDF أو صورة مسألة وهحلها وألخصهالك فوراً.\n\n' +
         'قولي، بتذاكر إيه النهاردة؟';
 
       await recordChatMessage(supabase, {
@@ -428,50 +488,37 @@ export async function POST(req: NextRequest) {
       content: rawText,
     });
 
-    // 1. Fetch recent messages in the last 3 minutes for multi-message combining
+    // Fetch recent chat history in the last 3 minutes for multi-message combining
     const threeMinAgo = new Date(Date.now() - 3 * 60 * 1000).toISOString();
-    const [recentHistoryRes, timetableRes, pendingTasksRes, recentNotesRes] = await Promise.all([
-      supabase
-        .from('chat_messages')
-        .select('content, created_at')
-        .eq('user_id', userId)
-        .eq('role', 'user')
-        .gte('created_at', threeMinAgo)
-        .order('created_at', { ascending: true })
-        .limit(4),
-      supabase.from('timetable').select('*').eq('user_id', userId),
-      supabase.from('assignments').select('*').eq('user_id', userId).eq('is_completed', false).limit(10),
-      supabase.from('notes').select('content').eq('user_id', userId).order('created_at', { ascending: false }).limit(2),
-    ]);
+    const { data: recentHistoryData } = await supabase
+      .from('chat_messages')
+      .select('content, created_at')
+      .eq('user_id', userId)
+      .eq('role', 'user')
+      .gte('created_at', threeMinAgo)
+      .order('created_at', { ascending: true })
+      .limit(4);
 
-    const recentHistory = recentHistoryRes.data?.map((m: any) => ({ text: m.content, time: m.created_at })) || [];
-    const timetableSlots = timetableRes.data || [];
-    const pendingTasks = pendingTasksRes.data || [];
-
-    // Build schedule context string so AI can answer schedule queries
-    const scheduleContext = `Scheduled Classes: ${timetableSlots.map((s: any) => `Day ${s.day_of_week}: ${s.subject} (${s.start_time}-${s.end_time})`).join(', ') || 'No classes registered yet'}\nPending Homework: ${pendingTasks.map((t: any) => `${t.title} (${t.subject}, Due: ${t.due_date})`).join(', ') || 'None'}`;
-    const recentNotes = recentNotesRes.data?.map((n: any) => n.content).join('\n---\n');
-
-    const explicitEnglish = 
-      /^\/?(en|english)\b/i.test(rawText) ||
-      /\b(speak|talk|reply|switch to|switch)\s+(in\s+)?english\b/i.test(rawText);
-    const hasArabic = /[\u0600-\u06FF]/.test(rawText);
-    const isEnglish = explicitEnglish || (!hasArabic && /[a-zA-Z]{3,}/.test(rawText));
+    const recentHistory = recentHistoryData?.map((m: any) => ({ text: m.content, time: m.created_at })) || [];
 
     // Process text with AI
     const aiResponse = await processUserMessageWithAI({
       text: rawText,
       languagePreference: isEnglish ? 'en' : 'ar',
       userProfile: profile,
-      scheduleContext,
+      databaseContext,
       recentMessages: recentHistory,
-      recentContext: recentNotes || undefined,
     });
 
-    // If an actionable task was extracted with sufficient confidence, execute and log it
+    // Execute detected bot actions
     let actionFeedback = '';
-    if (aiResponse.action && (aiResponse.confidence ?? 1.0) >= 0.7) {
-      actionFeedback = await executeDashboardAction(supabase, userId, aiResponse.action, 'telegram');
+    const actionsToRun = aiResponse.actions?.length ? aiResponse.actions : aiResponse.action;
+    if (actionsToRun) {
+      const actionResult = await executeBotActions(supabase, userId, actionsToRun, {
+        source: 'telegram',
+        isEnglish,
+      });
+      actionFeedback = actionResult.combinedFeedback;
     }
 
     let finalReply = aiResponse.reply;
@@ -493,240 +540,6 @@ export async function POST(req: NextRequest) {
     console.error('Telegram webhook processing error:', err);
     return NextResponse.json({ ok: false, error: 'Internal error' }, { status: 500 });
   }
-}
-
-// Helper to execute detected dashboard actions and log to ai_activity_logs with 1-click Undo state
-async function executeDashboardAction(
-  supabase: any,
-  userId: string,
-  action: any,
-  source: 'telegram' | 'whatsapp' = 'telegram'
-): Promise<string> {
-  if (!action || !action.type) return '';
-
-  try {
-    const today = new Date().toISOString().split('T')[0];
-    const data = action.data || action;
-
-    // A. LESSON CHANGE / RESCHEDULE
-    if (action.type === 'lesson_change') {
-      const subject = data.subject || 'General';
-      const dayIndex = typeof data.dayIndex === 'number' ? data.dayIndex : 0;
-      const startTime = data.startTime || '08:00';
-      const endTime = data.endTime || '09:30';
-
-      // Check existing slot
-      const { data: existingSlots } = await supabase
-        .from('timetable')
-        .select('*')
-        .eq('user_id', userId)
-        .ilike('subject', subject);
-
-      const targetSlot = existingSlots?.[0];
-
-      if (targetSlot) {
-        // Update existing slot
-        await supabase
-          .from('timetable')
-          .update({
-            day_of_week: dayIndex,
-            start_time: startTime,
-            end_time: endTime,
-          })
-          .eq('id', targetSlot.id);
-
-        await supabase.from('ai_activity_logs').insert({
-          user_id: userId,
-          action_type: 'UPDATE_LESSON',
-          title: `تعديل موعد حصة ${subject}`,
-          description: `تم نقل الموعد ليوم ${data.dayName || dayIndex} الساعة ${startTime}`,
-          source,
-          target_id: targetSlot.id,
-          target_table: 'timetable',
-          previous_state: targetSlot,
-        });
-
-        return `🔄 تم تعديل موعد حصة ${subject} في جدولك!`;
-      } else {
-        // Insert new slot
-        const { data: newSlot } = await supabase
-          .from('timetable')
-          .insert({
-            user_id: userId,
-            subject,
-            day_of_week: dayIndex,
-            start_time: startTime,
-            end_time: endTime,
-          })
-          .select('*')
-          .single();
-
-        await supabase.from('ai_activity_logs').insert({
-          user_id: userId,
-          action_type: 'UPDATE_LESSON',
-          title: `إضافة حصة ${subject}`,
-          description: `يوم ${data.dayName || dayIndex} الساعة ${startTime}`,
-          source,
-          target_id: newSlot?.id,
-          target_table: 'timetable',
-          previous_state: null,
-        });
-
-        return `✓ تم إضافة حصة ${subject} لجدولك!`;
-      }
-    }
-
-    // B. LESSON CANCELLED
-    if (action.type === 'lesson_cancel') {
-      const subject = data.subject || 'General';
-      const { data: existingSlots } = await supabase
-        .from('timetable')
-        .select('*')
-        .eq('user_id', userId)
-        .ilike('subject', subject);
-
-      const targetSlot = existingSlots?.[0];
-      if (targetSlot) {
-        await supabase.from('timetable').delete().eq('id', targetSlot.id);
-
-        await supabase.from('ai_activity_logs').insert({
-          user_id: userId,
-          action_type: 'CANCEL_LESSON',
-          title: `إلغاء حصة ${subject}`,
-          description: `تم حذف الحصة من الجدول بناءً على التنبيه`,
-          source,
-          target_id: targetSlot.id,
-          target_table: 'timetable',
-          previous_state: targetSlot,
-        });
-
-        return `✓ تم تسجيل إلغاء حصة ${subject} وحذفها من الجدول.`;
-      }
-      return '';
-    }
-
-    // C. HOMEWORK / ASSIGNMENT
-    if (action.type === 'assignment') {
-      const title = data.title || 'Homework';
-      const subject = data.subject || 'General';
-      const dueDate = data.date || today;
-
-      // Duplicate protection: check if same title & subject exists
-      const { data: existingA } = await supabase
-        .from('assignments')
-        .select('*')
-        .eq('user_id', userId)
-        .ilike('title', title)
-        .ilike('subject', subject)
-        .maybeSingle();
-
-      if (existingA) {
-        // Update due date
-        await supabase
-          .from('assignments')
-          .update({ due_date: dueDate })
-          .eq('id', existingA.id);
-
-        return `🔄 تم تحديث موعد تسليم ${title} إلى ${dueDate}.`;
-      }
-
-      const { data: newAssignment } = await supabase
-        .from('assignments')
-        .insert({
-          user_id: userId,
-          title,
-          subject,
-          due_date: dueDate,
-          priority: data.priority || 'medium',
-          is_completed: false,
-        })
-        .select('*')
-        .single();
-
-      await supabase.from('ai_activity_logs').insert({
-        user_id: userId,
-        action_type: 'CREATE_TASK',
-        title: `إضافة واجب: ${title}`,
-        description: `المادة: ${subject} • موعد التسليم: ${dueDate}`,
-        source,
-        target_id: newAssignment?.id,
-        target_table: 'assignments',
-        previous_state: null,
-      });
-
-      return `✓ تم تسجيل الواجب في جدولك (تسليم: ${dueDate}).`;
-    }
-
-    // D. EXAM
-    if (action.type === 'exam') {
-      const subject = data.subject || 'General';
-      const examDate = data.date || today;
-
-      const { data: newExam } = await supabase
-        .from('exams')
-        .insert({
-          user_id: userId,
-          subject,
-          exam_date: examDate,
-          notes: data.title || undefined,
-        })
-        .select('*')
-        .single();
-
-      await supabase.from('ai_activity_logs').insert({
-        user_id: userId,
-        action_type: 'CREATE_TASK',
-        title: `تسجيل امتحان ${subject}`,
-        description: `الموعد: ${examDate}`,
-        source,
-        target_id: newExam?.id,
-        target_table: 'exams',
-        previous_state: null,
-      });
-
-      return `📅 تم تسجيل امتحان ${subject} يوم ${examDate}.`;
-    }
-
-    // E. GRADE
-    if (action.type === 'grade') {
-      const score = Number(data.score) || 0;
-      const maxScore = Number(data.max_score) || 60;
-      await supabase.from('grades').insert({
-        user_id: userId,
-        subject: data.subject || 'General',
-        title: data.title || `Bot Log (${today})`,
-        score,
-        max_score: maxScore,
-        weight: 1.0,
-        date: today,
-      });
-      return `📊 تم تسجيل الدرجة (${score}/${maxScore}).`;
-    }
-
-    // F. HABIT
-    if (action.type === 'habit') {
-      const habitValue = Number(data.value) || 1;
-      const { data: userHabits } = await supabase.from('habits').select('*').eq('user_id', userId);
-      const targetHabit = userHabits?.[0];
-
-      if (targetHabit) {
-        await supabase.from('habit_logs').upsert(
-          {
-            user_id: userId,
-            habit_id: targetHabit.id,
-            date: today,
-            value: habitValue,
-            completed: true,
-          },
-          { onConflict: 'user_id,habit_id,date' }
-        );
-      }
-      return `⚡ تم تسجيل العادة اليومية.`;
-    }
-  } catch (err) {
-    console.error('Error executing dashboard action:', err);
-  }
-  return '';
 }
 
 export async function GET() {
