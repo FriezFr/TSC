@@ -9,6 +9,9 @@ import {
   generateDailyMorningBriefing,
   computeExamReadiness,
   generateWeeklyProgressReport,
+  generateTodayScheduleBrief,
+  generateWhatToStudyBrief,
+  generatePendingTasksBrief,
 } from '@/lib/bot-actions';
 
 interface TelegramPhoto {
@@ -41,6 +44,24 @@ interface TelegramAudio {
   file_size?: number;
 }
 
+interface TelegramCallbackQuery {
+  id: string;
+  from: {
+    id: number;
+    first_name?: string;
+    username?: string;
+  };
+  message?: {
+    message_id: number;
+    chat: {
+      id: number;
+      type: string;
+    };
+    text?: string;
+  };
+  data?: string;
+}
+
 interface TelegramUpdate {
   update_id: number;
   message?: {
@@ -63,6 +84,7 @@ interface TelegramUpdate {
     audio?: TelegramAudio;
     reply_to_message?: any;
   };
+  callback_query?: TelegramCallbackQuery;
 }
 
 // Send typing / upload status to Telegram
@@ -78,6 +100,32 @@ async function sendChatAction(chatId: number, action: 'typing' | 'upload_documen
   } catch {
     // Ignore status errors
   }
+}
+
+// Answer inline keyboard callback queries so the loading spinner stops
+async function answerCallbackQuery(callbackQueryId: string) {
+  const token = process.env.TELEGRAM_BOT_TOKEN;
+  if (!token) return;
+  try {
+    await fetch(`https://api.telegram.org/bot${token}/answerCallbackQuery`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ callback_query_id: callbackQueryId }),
+    });
+  } catch {
+    // Ignore status errors
+  }
+}
+
+// Quick action buttons for Telegram
+function getTelegramDashboardButtons(isEnglish: boolean) {
+  return {
+    inline_keyboard: [
+      [{ text: isEnglish ? '🧠 What to Study?' : '🧠 أذاكر إيه؟', callback_data: 'btn_what_to_study' }],
+      [{ text: isEnglish ? '📅 Today Schedule' : '📅 جدول اليوم', callback_data: 'btn_today_schedule' }],
+      [{ text: isEnglish ? '🎯 Exam Readiness' : '🎯 جاهز للامتحان؟', callback_data: 'btn_exam_readiness' }],
+    ],
+  };
 }
 
 // Comprehensive greeting and full explanation for new or unlinked Telegram accounts
@@ -96,7 +144,7 @@ function formatForTelegram(text: string): string {
 }
 
 // Send reply with automatic chunking for Telegram's 4096 character limit
-async function sendTelegramReply(chatId: number, rawText: string) {
+async function sendTelegramReply(chatId: number, rawText: string, replyMarkup?: any) {
   const token = process.env.TELEGRAM_BOT_TOKEN;
   if (!token) {
     console.error('TELEGRAM_BOT_TOKEN is not configured');
@@ -107,14 +155,19 @@ async function sendTelegramReply(chatId: number, rawText: string) {
   const maxChunk = 4000;
   for (let i = 0; i < text.length; i += maxChunk) {
     const chunk = text.slice(i, i + maxChunk);
+    const isLastChunk = i + maxChunk >= text.length;
     try {
+      const payload: any = {
+        chat_id: chatId,
+        text: chunk,
+      };
+      if (isLastChunk && replyMarkup) {
+        payload.reply_markup = replyMarkup;
+      }
       const res = await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          chat_id: chatId,
-          text: chunk,
-        }),
+        body: JSON.stringify(payload),
       });
       const data = await res.json();
       if (!res.ok || !data.ok) {
@@ -182,27 +235,57 @@ export async function POST(req: NextRequest) {
   try {
     const update = (await req.json()) as TelegramUpdate;
     const message = update.message;
+    const callbackQuery = update.callback_query;
 
-    if (!message) {
-      return NextResponse.json({ ok: true, note: 'No message in update' });
+    if (!message && !callbackQuery) {
+      return NextResponse.json({ ok: true, note: 'No message or callback_query in update' });
     }
 
-    const chatId = message.chat.id;
-    const isGroup = message.chat.type === 'group' || message.chat.type === 'supergroup';
-    const rawText = (message.text || message.caption || '').trim();
+    let chatId: number;
+    let isGroup = false;
+    let rawText = '';
 
-    // In Telegram Groups: Only reply if the bot is explicitly mentioned, tagged, or replied to!
-    if (isGroup) {
-      const isBotMentioned =
-        rawText.includes('@TSCTaskerBot') ||
-        rawText.includes('@TSC') ||
-        rawText.startsWith('/') ||
-        message.reply_to_message?.from?.is_bot === true;
+    if (callbackQuery) {
+      chatId = callbackQuery.message?.chat.id || callbackQuery.from.id;
+      isGroup = callbackQuery.message?.chat.type === 'group' || callbackQuery.message?.chat.type === 'supergroup';
+      await answerCallbackQuery(callbackQuery.id);
 
-      if (!isBotMentioned) {
-        // Silently ignore group banter so people can chat freely without bot interruption
-        return NextResponse.json({ ok: true, note: 'Ignored group message without bot mention' });
+      const callbackData = callbackQuery.data || '';
+      if (callbackData === 'btn_what_to_study') {
+        rawText = 'أذاكر إيه دلوقتي؟';
+      } else if (callbackData === 'btn_today_schedule') {
+        rawText = 'جدول اليوم';
+      } else if (callbackData === 'btn_exam_readiness') {
+        rawText = 'جاهز للامتحان؟';
+      } else if (callbackData === 'btn_pending_tasks') {
+        rawText = 'الواجبات';
+      } else if (callbackData === 'btn_morning_briefing') {
+        rawText = 'تقرير الصباح';
+      } else if (callbackData === 'btn_weekly_report') {
+        rawText = 'تقرير الأسبوع';
+      } else {
+        rawText = callbackData;
       }
+    } else if (message) {
+      chatId = message.chat.id;
+      isGroup = message.chat.type === 'group' || message.chat.type === 'supergroup';
+      rawText = (message.text || message.caption || '').trim();
+
+      // In Telegram Groups: Only reply if the bot is explicitly mentioned, tagged, or replied to!
+      if (isGroup) {
+        const isBotMentioned =
+          rawText.includes('@TSCTaskerBot') ||
+          rawText.includes('@TSC') ||
+          rawText.startsWith('/') ||
+          message.reply_to_message?.from?.is_bot === true;
+
+        if (!isBotMentioned) {
+          // Silently ignore group banter so people can chat freely without bot interruption
+          return NextResponse.json({ ok: true, note: 'Ignored group message without bot mention' });
+        }
+      }
+    } else {
+      return NextResponse.json({ ok: true });
     }
 
     const isDump = isGroupChatDump(rawText);
@@ -281,8 +364,8 @@ export async function POST(req: NextRequest) {
 
       // Check if message is a simple greeting or general introductory ping
       const isGreetingOnly =
-        !message.document &&
-        !message.photo &&
+        !message?.document &&
+        !message?.photo &&
         (/^\/?(hi|hello|hey|salam|start|help|\/start|\/help|سلام|السلام عليكم|الو|مين|مين معايا|اهلا|أهلا|ازيك|ازيك يا بوت|مساء الخير|صباح الخير)\b/i.test(
           rawText.trim()
         ) ||
@@ -296,12 +379,12 @@ export async function POST(req: NextRequest) {
       // If new/unlinked user sends a real question, homework problem, image, or PDF:
       // Answer it fully using Gemini in guest mode + include welcome header and linking footer
       try {
-        await sendChatAction(chatId, message.document ? 'upload_document' : 'typing');
+        await sendChatAction(chatId, message?.document ? 'upload_document' : 'typing');
 
         let mediaPart: { mimeType: string; data: string } | undefined = undefined;
         let fileName: string | undefined = undefined;
 
-        if (message.document) {
+        if (message?.document) {
           const doc = message.document;
           fileName = doc.file_name || 'Study Document';
           const downloaded = await downloadTelegramFile(doc.file_id);
@@ -311,7 +394,7 @@ export async function POST(req: NextRequest) {
               data: downloaded.buffer.toString('base64'),
             };
           }
-        } else if (message.photo && message.photo.length > 0) {
+        } else if (message?.photo && message.photo.length > 0) {
           const largestPhoto = message.photo[message.photo.length - 1];
           const downloaded = await downloadTelegramFile(largestPhoto.file_id);
           if (downloaded) {
@@ -359,13 +442,13 @@ export async function POST(req: NextRequest) {
       .maybeSingle();
 
     // Trigger typing action
-    await sendChatAction(chatId, message.document ? 'upload_document' : 'typing');
+    await sendChatAction(chatId, message?.document ? 'upload_document' : 'typing');
 
     // Fetch full active database context (timetable, assignments, exams, flashcard decks, notes)
     const databaseContext = await buildFullStudentContext(supabase, userId);
 
     // Case A: User sent a Document (e.g. PDF file like "Ch 1 L 1_2027.pdf")
-    if (message.document) {
+    if (message?.document) {
       const doc = message.document;
       const downloaded = await downloadTelegramFile(doc.file_id);
 
@@ -424,12 +507,12 @@ export async function POST(req: NextRequest) {
         content: finalReply,
       });
 
-      await sendTelegramReply(chatId, finalReply);
+      await sendTelegramReply(chatId, finalReply, getTelegramDashboardButtons(isEnglish));
       return NextResponse.json({ ok: true });
     }
 
     // Case B: User sent a Photo / Image (textbook question, exam problem, diagram)
-    if (message.photo && message.photo.length > 0) {
+    if (message?.photo && message.photo.length > 0) {
       const largestPhoto = message.photo[message.photo.length - 1];
       const downloaded = await downloadTelegramFile(largestPhoto.file_id);
 
@@ -478,12 +561,12 @@ export async function POST(req: NextRequest) {
         content: finalReply,
       });
 
-      await sendTelegramReply(chatId, finalReply);
+      await sendTelegramReply(chatId, finalReply, getTelegramDashboardButtons(isEnglish));
       return NextResponse.json({ ok: true });
     }
 
     // Case C: User sent a Voice Note or Audio
-    if (message.voice || message.audio) {
+    if (message?.voice || message?.audio) {
       const audioTarget = message.voice || message.audio;
       const downloaded = await downloadTelegramFile(audioTarget!.file_id);
 
@@ -532,7 +615,7 @@ export async function POST(req: NextRequest) {
         content: finalReply,
       });
 
-      await sendTelegramReply(chatId, finalReply);
+      await sendTelegramReply(chatId, finalReply, getTelegramDashboardButtons(isEnglish));
       return NextResponse.json({ ok: true });
     }
 
@@ -540,28 +623,95 @@ export async function POST(req: NextRequest) {
     // DIRECT AUTONOMOUS INTELLIGENCE TRIGGERS (<100ms Deterministic)
     // -------------------------------------------------------------
 
-    // A. Daily Morning Briefing
-    const isMorningBriefing =
-      /\b(morning briefing|daily brief|صباح الخير|تقرير الصباح|تقرير بداية اليوم|بريف الصباح)\b/i.test(
-        rawText.trim()
-      );
+    const cleanCmd = rawText.trim().replace(/^\//, '').replace(/[؟!.,]/g, '').trim().toLowerCase();
+    const telegramButtons = getTelegramDashboardButtons(isEnglish);
 
-    if (isMorningBriefing) {
+    // A. Full Daily Dashboard (/dashboard, /dashbored, dashboard, dashbored, لوحة التحكم, etc.)
+    const isDashboardQuery =
+      !message?.document &&
+      !message?.photo &&
+      (/^(dash|dashboard|dashbored|dashbord|لوحة التحكم|الداشبورد|داشبورد|التحكم)$/i.test(cleanCmd) ||
+        /(dashboard|dashbored|dashbord|الداشبورد|داشبورد|لوحة التحكم)/i.test(rawText));
+
+    if (isDashboardQuery) {
       const briefing = await generateDailyMorningBriefing(supabase, userId, isEnglish);
       await recordChatMessage(supabase, {
         userId,
         role: 'assistant',
         content: briefing,
       });
-      await sendTelegramReply(chatId, briefing);
+      await sendTelegramReply(chatId, briefing, telegramButtons);
       return NextResponse.json({ ok: true });
     }
 
-    // B. AI Exam Readiness Score Engine
+    // B. Today's Schedule & Classes (/schedule, /today, جدول اليوم, جدول النهارده, etc.)
+    const isTodaySchedule =
+      !message?.document &&
+      !message?.photo &&
+      (/^(schedule|today|timetable|جدول اليوم|جدول النهارده|حصص اليوم|حصص النهارده|الجدول)$/i.test(cleanCmd) ||
+        /(جدول اليوم|جدول النهارده|حصص اليوم|حصص النهارده|قولي جدول النهارده|جدول النهاردة|today schedule|today's schedule|classes today)/i.test(
+          rawText
+        ));
+
+    if (isTodaySchedule) {
+      const scheduleBrief = await generateTodayScheduleBrief(supabase, userId, isEnglish);
+      await recordChatMessage(supabase, {
+        userId,
+        role: 'assistant',
+        content: scheduleBrief,
+      });
+      await sendTelegramReply(chatId, scheduleBrief, telegramButtons);
+      return NextResponse.json({ ok: true });
+    }
+
+    // C. What Should I Study Right Now? (/study, أذاكر إيه دلوقتي, what to study, etc.)
+    const isWhatToStudy =
+      !message?.document &&
+      !message?.photo &&
+      (/^(study|what to study|أذاكر إيه|اذاكر ايه|أذاكر ايه دلوقتي|اذاكر ايه دلوقتي)$/i.test(cleanCmd) ||
+        /(what should i study|what to study|أذاكر إيه دلوقتي|اذاكر ايه دلوقتي|أذاكر إيه|اذاكر ايه|ذاكر ايه|ذاكر إيه)/i.test(
+          rawText
+        ));
+
+    if (isWhatToStudy) {
+      const studyDecision = await generateWhatToStudyBrief(supabase, userId, isEnglish);
+      await recordChatMessage(supabase, {
+        userId,
+        role: 'assistant',
+        content: studyDecision,
+      });
+      await sendTelegramReply(chatId, studyDecision, telegramButtons);
+      return NextResponse.json({ ok: true });
+    }
+
+    // D. Pending Homework & Tasks (/tasks, /homework, الواجبات, عليا إيه, etc.)
+    const isPendingTasks =
+      !message?.document &&
+      !message?.photo &&
+      (/^(tasks|homework|واجبات|الواجبات|واجباتي|عليا إيه|عليا ايه)$/i.test(cleanCmd) ||
+        /(عليا إيه|عليا ايه|عليا ايه النهارده|عليا إيه النهارده|واجبات النهارده|pending tasks|my homework|what is due)/i.test(
+          rawText
+        ));
+
+    if (isPendingTasks) {
+      const tasksBrief = await generatePendingTasksBrief(supabase, userId, isEnglish);
+      await recordChatMessage(supabase, {
+        userId,
+        role: 'assistant',
+        content: tasksBrief,
+      });
+      await sendTelegramReply(chatId, tasksBrief, telegramButtons);
+      return NextResponse.json({ ok: true });
+    }
+
+    // E. AI Exam Readiness Score Engine
     const isExamReadiness =
-      /\b(exam readiness|readiness|جاهز للامتحان|درجة الاستعداد|درجة استعدادي|استعدادي للامتحان|مستعد للامتحان|هل انا جاهز)\b/i.test(
-        rawText.trim()
-      );
+      !message?.document &&
+      !message?.photo &&
+      (/^(readiness|exam readiness|جاهز للامتحان|درجة الاستعداد|درجة استعدادي)$/i.test(cleanCmd) ||
+        /(exam readiness|readiness|جاهز للامتحان|درجة الاستعداد|درجة استعدادي|استعدادي للامتحان|مستعد للامتحان|هل انا جاهز)/i.test(
+          rawText
+        ));
 
     if (isExamReadiness) {
       const readinessReport = await computeExamReadiness(supabase, userId, isEnglish);
@@ -570,15 +720,38 @@ export async function POST(req: NextRequest) {
         role: 'assistant',
         content: readinessReport,
       });
-      await sendTelegramReply(chatId, readinessReport);
+      await sendTelegramReply(chatId, readinessReport, telegramButtons);
       return NextResponse.json({ ok: true });
     }
 
-    // C. 1-Click Weekly Study & Parent Progress Report
+    // F. Daily Morning Briefing
+    const isMorningBriefing =
+      !message?.document &&
+      !message?.photo &&
+      (/^(morning|brief|morning briefing|daily brief|صباح الخير|تقرير الصباح)$/i.test(cleanCmd) ||
+        /(morning briefing|daily brief|صباح الخير|تقرير الصباح|تقرير بداية اليوم|بريف الصباح)/i.test(
+          rawText
+        ));
+
+    if (isMorningBriefing) {
+      const briefing = await generateDailyMorningBriefing(supabase, userId, isEnglish);
+      await recordChatMessage(supabase, {
+        userId,
+        role: 'assistant',
+        content: briefing,
+      });
+      await sendTelegramReply(chatId, briefing, telegramButtons);
+      return NextResponse.json({ ok: true });
+    }
+
+    // G. 1-Click Weekly Study & Parent Progress Report
     const isWeeklyReport =
-      /\b(weekly report|parent report|تقرير الأسبوع|تقرير لولي الأمر|تقرير ولي الامر|تقرير اسبوعي|تقرير شامل|تقرير الاسبوع)\b/i.test(
-        rawText.trim()
-      );
+      !message?.document &&
+      !message?.photo &&
+      (/^(report|weekly report|parent report|تقرير الأسبوع|تقرير لولي الأمر)$/i.test(cleanCmd) ||
+        /(weekly report|parent report|تقرير الأسبوع|تقرير لولي الأمر|تقرير ولي الامر|تقرير اسبوعي|تقرير شامل|تقرير الاسبوع)/i.test(
+          rawText
+        ));
 
     if (isWeeklyReport) {
       const progressReport = await generateWeeklyProgressReport(supabase, userId, isEnglish);
@@ -587,21 +760,26 @@ export async function POST(req: NextRequest) {
         role: 'assistant',
         content: progressReport,
       });
-      await sendTelegramReply(chatId, progressReport);
+      await sendTelegramReply(chatId, progressReport, telegramButtons);
       return NextResponse.json({ ok: true });
     }
 
-    // Case D: User sent greeting, /start, /help, commands inquiry, or question
+    // H. User sent greeting, /start, /help, commands inquiry, or question
     const isExplicitCommandQuery =
-      /\b(help|commands|\/help|\/commands|\/start|start|أوامر|الاوامر|الأوامر|اوامر|اوامر البوت|بتعمل ايه|مين انت|عرفني بنفسك|شرح البوت|كيف استخدمك|طريقة الاستخدام|لوحة التحكم|dashboard)\b/i.test(
-        rawText.trim()
-      );
+      !message?.document &&
+      !message?.photo &&
+      (/^(help|commands|menu|أوامر|اوامر|الأوامر|الاوامر|اوامر البوت)$/i.test(cleanCmd) ||
+        /(commands|help|أوامر|الاوامر|الأوامر|اوامر|اوامر البوت|بتعمل ايه|مين انت|عرفني بنفسك|شرح البوت|كيف استخدمك|طريقة الاستخدام)/i.test(
+          rawText
+        ));
 
     const isSimpleGreetingOnly =
+      !message?.document &&
+      !message?.photo &&
       /^\/?(yo|hi|hello|hey|sup|ازيك|ازيك يا بوت|سلام|السلام عليكم|الو|اهلا|أهلا|مساء الخير|bruh)\b/i.test(
-        rawText.trim()
+        rawText
       ) &&
-      rawText.trim().split(/\s+/).length <= 3;
+      rawText.split(/\s+/).length <= 3;
 
     if (isExplicitCommandQuery || isSimpleGreetingOnly) {
       const guide = getTSCCommandsGuide({
@@ -622,7 +800,7 @@ export async function POST(req: NextRequest) {
         content: guide,
       });
 
-      await sendTelegramReply(chatId, guide);
+      await sendTelegramReply(chatId, guide, telegramButtons);
       return NextResponse.json({ ok: true });
     }
 
@@ -683,7 +861,7 @@ export async function POST(req: NextRequest) {
     });
 
     // ALWAYS reply with AI!
-    await sendTelegramReply(chatId, finalReply);
+    await sendTelegramReply(chatId, finalReply, telegramButtons);
     return NextResponse.json({ ok: true });
   } catch (err) {
     console.error('Telegram webhook processing error:', err);

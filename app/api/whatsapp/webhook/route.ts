@@ -9,6 +9,10 @@ import {
   generateDailyMorningBriefing,
   computeExamReadiness,
   generateWeeklyProgressReport,
+  generateDashboardQuickMenu,
+  generateTodayScheduleBrief,
+  generateWhatToStudyBrief,
+  generatePendingTasksBrief,
 } from '@/lib/bot-actions';
 import {
   sendWhatsAppReply,
@@ -431,18 +435,26 @@ async function handleAsyncWhatsAppMessage(params: {
     time: m.created_at,
   }));
 
+  // Standard 3 Quick-Action Dashboard Buttons (strictly <= 20 chars per Meta API)
+  const dashboardQuickButtons = [
+    { id: 'btn_what_to_study', title: isEnglish ? '🧠 What to Study?' : '🧠 أذاكر إيه؟' },
+    { id: 'btn_today_schedule', title: isEnglish ? '📅 Today Schedule' : '📅 جدول اليوم' },
+    { id: 'btn_exam_readiness', title: isEnglish ? '🎯 Exam Readiness' : '🎯 جاهز للامتحان؟' },
+  ];
+
   // -------------------------------------------------------------
   // DIRECT AUTONOMOUS INTELLIGENCE TRIGGERS (<100ms Deterministic)
   // -------------------------------------------------------------
 
-  // A. Daily Morning Briefing
-  const isMorningBriefing =
-    !mediaPart &&
-    /\b(morning briefing|daily brief|صباح الخير|تقرير الصباح|تقرير بداية اليوم|بريف الصباح)\b/i.test(
-      incomingText.trim()
-    );
+  const cleanCmd = incomingText.trim().replace(/^\//, '').replace(/[؟!.,]/g, '').trim().toLowerCase();
 
-  if (isMorningBriefing) {
+  // A. Full Daily Dashboard (/dashboard, /dashbored, dashboard, dashbored, لوحة التحكم, etc.)
+  const isDashboardQuery =
+    !mediaPart &&
+    (/^(dash|dashboard|dashbored|dashbord|لوحة التحكم|الداشبورد|داشبورد|التحكم)$/i.test(cleanCmd) ||
+      /(dashboard|dashbored|dashbord|الداشبورد|داشبورد|لوحة التحكم)/i.test(incomingText));
+
+  if (isDashboardQuery) {
     const briefing = await generateDailyMorningBriefing(supabase, userId, isEnglish);
 
     await supabase.from('chat_messages').insert({
@@ -453,24 +465,102 @@ async function handleAsyncWhatsAppMessage(params: {
       media_type: 'text',
     });
 
-    await sendWhatsAppInteractiveButtons(fromNumber, briefing, [
-      { id: 'btn_what_to_study', title: isEnglish ? '🧠 What to Study?' : '🧠 أذاكر إيه؟' },
-      { id: 'btn_today_schedule', title: isEnglish ? '📅 Today Schedule' : '📅 جدول اليوم' },
-      { id: 'btn_exam_readiness', title: isEnglish ? '🎯 Exam Readiness' : '🎯 جاهز للامتحان؟' },
-    ]);
+    await sendWhatsAppInteractiveButtons(fromNumber, briefing, dashboardQuickButtons);
 
     if (messageId && fromNumber) {
-      reactWhatsAppMessage(fromNumber, messageId, '☀️').catch(() => {});
+      reactWhatsAppMessage(fromNumber, messageId, '⚡').catch(() => {});
     }
     return;
   }
 
-  // B. AI Exam Readiness Score Engine
+  // B. Today's Schedule & Classes (/schedule, /today, جدول اليوم, جدول النهارده, etc.)
+  const isTodaySchedule =
+    !mediaPart &&
+    (/^(schedule|today|timetable|جدول اليوم|جدول النهارده|حصص اليوم|حصص النهارده|الجدول)$/i.test(cleanCmd) ||
+      /(جدول اليوم|جدول النهارده|حصص اليوم|حصص النهارده|قولي جدول النهارده|جدول النهاردة|today schedule|today's schedule|classes today)/i.test(
+        incomingText
+      ));
+
+  if (isTodaySchedule) {
+    const scheduleBrief = await generateTodayScheduleBrief(supabase, userId, isEnglish);
+
+    await supabase.from('chat_messages').insert({
+      user_id: userId,
+      role: 'assistant',
+      source: 'whatsapp',
+      content: scheduleBrief,
+      media_type: 'text',
+    });
+
+    await sendWhatsAppInteractiveButtons(fromNumber, scheduleBrief, dashboardQuickButtons);
+
+    if (messageId && fromNumber) {
+      reactWhatsAppMessage(fromNumber, messageId, '📅').catch(() => {});
+    }
+    return;
+  }
+
+  // C. What Should I Study Right Now? (/study, أذاكر إيه دلوقتي, what to study, etc.)
+  const isWhatToStudy =
+    !mediaPart &&
+    (/^(study|what to study|أذاكر إيه|اذاكر ايه|أذاكر ايه دلوقتي|اذاكر ايه دلوقتي)$/i.test(cleanCmd) ||
+      /(what should i study|what to study|أذاكر إيه دلوقتي|اذاكر ايه دلوقتي|أذاكر إيه|اذاكر ايه|ذاكر ايه|ذاكر إيه)/i.test(
+        incomingText
+      ));
+
+  if (isWhatToStudy) {
+    const studyDecision = await generateWhatToStudyBrief(supabase, userId, isEnglish);
+
+    await supabase.from('chat_messages').insert({
+      user_id: userId,
+      role: 'assistant',
+      source: 'whatsapp',
+      content: studyDecision,
+      media_type: 'text',
+    });
+
+    await sendWhatsAppInteractiveButtons(fromNumber, studyDecision, dashboardQuickButtons);
+
+    if (messageId && fromNumber) {
+      reactWhatsAppMessage(fromNumber, messageId, '🧠').catch(() => {});
+    }
+    return;
+  }
+
+  // D. Pending Homework & Tasks (/tasks, /homework, الواجبات, عليا إيه, etc.)
+  const isPendingTasks =
+    !mediaPart &&
+    (/^(tasks|homework|واجبات|الواجبات|واجباتي|عليا إيه|عليا ايه)$/i.test(cleanCmd) ||
+      /(عليا إيه|عليا ايه|عليا ايه النهارده|عليا إيه النهارده|واجبات النهارده|pending tasks|my homework|what is due)/i.test(
+        incomingText
+      ));
+
+  if (isPendingTasks) {
+    const tasksBrief = await generatePendingTasksBrief(supabase, userId, isEnglish);
+
+    await supabase.from('chat_messages').insert({
+      user_id: userId,
+      role: 'assistant',
+      source: 'whatsapp',
+      content: tasksBrief,
+      media_type: 'text',
+    });
+
+    await sendWhatsAppInteractiveButtons(fromNumber, tasksBrief, dashboardQuickButtons);
+
+    if (messageId && fromNumber) {
+      reactWhatsAppMessage(fromNumber, messageId, '📝').catch(() => {});
+    }
+    return;
+  }
+
+  // E. AI Exam Readiness Score Engine
   const isExamReadiness =
     !mediaPart &&
-    /\b(exam readiness|readiness|جاهز للامتحان|درجة الاستعداد|درجة استعدادي|استعدادي للامتحان|مستعد للامتحان|هل انا جاهز)\b/i.test(
-      incomingText.trim()
-    );
+    (/^(readiness|exam readiness|جاهز للامتحان|درجة الاستعداد|درجة استعدادي)$/i.test(cleanCmd) ||
+      /(exam readiness|readiness|جاهز للامتحان|درجة الاستعداد|درجة استعدادي|استعدادي للامتحان|مستعد للامتحان|هل انا جاهز)/i.test(
+        incomingText
+      ));
 
   if (isExamReadiness) {
     const readinessReport = await computeExamReadiness(supabase, userId, isEnglish);
@@ -483,11 +573,7 @@ async function handleAsyncWhatsAppMessage(params: {
       media_type: 'text',
     });
 
-    await sendWhatsAppInteractiveButtons(fromNumber, readinessReport, [
-      { id: 'btn_what_to_study', title: isEnglish ? '🧠 What to Study?' : '🧠 أذاكر إيه؟' },
-      { id: 'btn_morning_briefing', title: isEnglish ? '☀️ Morning Brief' : '☀️ صباح الخير' },
-      { id: 'btn_weekly_report', title: isEnglish ? '📋 Weekly Report' : '📋 تقرير الأسبوع' },
-    ]);
+    await sendWhatsAppInteractiveButtons(fromNumber, readinessReport, dashboardQuickButtons);
 
     if (messageId && fromNumber) {
       reactWhatsAppMessage(fromNumber, messageId, '🎯').catch(() => {});
@@ -495,12 +581,40 @@ async function handleAsyncWhatsAppMessage(params: {
     return;
   }
 
-  // C. 1-Click Weekly Study & Parent Progress Report
+  // F. Daily Morning Briefing
+  const isMorningBriefing =
+    !mediaPart &&
+    (/^(morning|brief|morning briefing|daily brief|صباح الخير|تقرير الصباح)$/i.test(cleanCmd) ||
+      /(morning briefing|daily brief|صباح الخير|تقرير الصباح|تقرير بداية اليوم|بريف الصباح)/i.test(
+        incomingText
+      ));
+
+  if (isMorningBriefing) {
+    const briefing = await generateDailyMorningBriefing(supabase, userId, isEnglish);
+
+    await supabase.from('chat_messages').insert({
+      user_id: userId,
+      role: 'assistant',
+      source: 'whatsapp',
+      content: briefing,
+      media_type: 'text',
+    });
+
+    await sendWhatsAppInteractiveButtons(fromNumber, briefing, dashboardQuickButtons);
+
+    if (messageId && fromNumber) {
+      reactWhatsAppMessage(fromNumber, messageId, '☀️').catch(() => {});
+    }
+    return;
+  }
+
+  // G. 1-Click Weekly Study & Parent Progress Report
   const isWeeklyReport =
     !mediaPart &&
-    /\b(weekly report|parent report|تقرير الأسبوع|تقرير لولي الأمر|تقرير ولي الامر|تقرير اسبوعي|تقرير شامل|تقرير الاسبوع)\b/i.test(
-      incomingText.trim()
-    );
+    (/^(report|weekly report|parent report|تقرير الأسبوع|تقرير لولي الأمر)$/i.test(cleanCmd) ||
+      /(weekly report|parent report|تقرير الأسبوع|تقرير لولي الأمر|تقرير ولي الامر|تقرير اسبوعي|تقرير شامل|تقرير الاسبوع)/i.test(
+        incomingText
+      ));
 
   if (isWeeklyReport) {
     const progressReport = await generateWeeklyProgressReport(supabase, userId, isEnglish);
@@ -513,7 +627,7 @@ async function handleAsyncWhatsAppMessage(params: {
       media_type: 'text',
     });
 
-    await sendWhatsAppReply(fromNumber, progressReport);
+    await sendWhatsAppInteractiveButtons(fromNumber, progressReport, dashboardQuickButtons);
 
     if (messageId && fromNumber) {
       reactWhatsAppMessage(fromNumber, messageId, '📋').catch(() => {});
@@ -521,12 +635,13 @@ async function handleAsyncWhatsAppMessage(params: {
     return;
   }
 
-  // D. Commands Guide & Intro Ping
-  const isExplicitCommandQuery =
+  // H. Commands Guide & Full Intro
+  const isCommandsQuery =
     !mediaPart &&
-    /\b(help|commands|\/help|\/commands|أوامر|الاوامر|الأوامر|اوامر|اوامر البوت|بتعمل ايه|مين انت|عرفني بنفسك|شرح البوت|كيف استخدمك|طريقة الاستخدام|لوحة التحكم|dashboard)\b/i.test(
-      incomingText.trim()
-    );
+    (/^(help|commands|menu|أوامر|اوامر|الأوامر|الاوامر|اوامر البوت)$/i.test(cleanCmd) ||
+      /(commands|help|أوامر|الاوامر|الأوامر|اوامر|اوامر البوت|بتعمل ايه|مين انت|عرفني بنفسك|شرح البوت|طريقة الاستخدام)/i.test(
+        incomingText
+      ));
 
   const isSimpleGreetingOnly =
     !mediaPart &&
@@ -535,7 +650,7 @@ async function handleAsyncWhatsAppMessage(params: {
     ) &&
     incomingText.trim().split(/\s+/).length <= 3;
 
-  if (isExplicitCommandQuery || isSimpleGreetingOnly) {
+  if (isCommandsQuery || isSimpleGreetingOnly) {
     const guide = getTSCCommandsGuide({
       isEnglish,
       isLinked: true,
@@ -550,11 +665,7 @@ async function handleAsyncWhatsAppMessage(params: {
       media_type: 'text',
     });
 
-    await sendWhatsAppInteractiveButtons(fromNumber, guide, [
-      { id: 'btn_what_to_study', title: isEnglish ? '🧠 What to Study?' : '🧠 أذاكر إيه؟' },
-      { id: 'btn_today_schedule', title: isEnglish ? '📅 Today Schedule' : '📅 جدول اليوم' },
-      { id: 'btn_exam_readiness', title: isEnglish ? '🎯 Exam Readiness' : '🎯 جاهز للامتحان؟' },
-    ]);
+    await sendWhatsAppInteractiveButtons(fromNumber, guide, dashboardQuickButtons);
 
     if (messageId && fromNumber) {
       reactWhatsAppMessage(fromNumber, messageId, '⚡').catch(() => {});
@@ -610,11 +721,12 @@ async function handleAsyncWhatsAppMessage(params: {
     media_type: 'text',
   });
 
-  // 7. Send WhatsApp Reply back to student
-  await sendWhatsAppReply(fromNumber, finalReply);
+  // 7. Send WhatsApp Reply with Interactive Buttons attached!
+  await sendWhatsAppInteractiveButtons(fromNumber, finalReply, dashboardQuickButtons);
 
   // 8. Update reaction to checkmark
   if (messageId && fromNumber) {
     reactWhatsAppMessage(fromNumber, messageId, '✅').catch(() => {});
   }
 }
+

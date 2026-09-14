@@ -1768,5 +1768,308 @@ export async function generateWeeklyProgressReport(
   }
 }
 
+/**
+ * 4. Dashboard Quick Menu
+ * Generated when the student types /dashboard, /dashbored, dashboard, commands, etc.
+ * Accompanied by the 3 interactive quick-action buttons.
+ */
+export function generateDashboardQuickMenu(options: {
+  userName?: string;
+  isEnglish?: boolean;
+}): string {
+  const { userName, isEnglish } = options;
+  const firstName = userName ? userName.split(' ')[0] : (isEnglish ? 'Student' : 'إسماعيل');
+
+  if (isEnglish) {
+    return (
+      `📊 SMART SCHOOL DASHBOARD — TSC\n` +
+      `Welcome, ${firstName}! Here is your central study command center:\n\n` +
+      `• 🧠 Smart Study Decision: Determines exactly what to focus on right now for 45 minutes.\n` +
+      `• 📅 Today's Schedule: View today's school classes, tutors, and exact times.\n` +
+      `• 🎯 Exam Readiness: Live percentage readiness score for each of your subjects.\n` +
+      `• 📝 Homework & Tasks: View pending assignments and upcoming deadlines.\n` +
+      `• ☀️ Morning Briefing: Get your full daily agenda and priorities.\n\n` +
+      `Tap any of the quick-action buttons below or send your request directly:`
+    );
+  }
+
+  return (
+    `📊 لوحة التحكم الذكية — TSC Dashboard\n` +
+    `أهلاً يا ${firstName}! إليك مركز التحكم السريع لتنظيم ومتابعة دراستك:\n\n` +
+    `• 🧠 قرار المذاكرة: فحص الامتحانات والواجبات ونقاط ضعفك لتحديد ما تذاكره الآن (45 دقيقة).\n` +
+    `• 📅 جدول اليوم: استعراض حصصك المدرسية ودروسك ومواعيدها لليوم بالتفصيل.\n` +
+    `• 🎯 جاهز للامتحان؟: قياس مستوى جاهزيتك لكل مادة بالأرقام مع فحص بنك الأخطاء.\n` +
+    `• 📝 الواجبات والمهام: متابعة ما عليك تسليمه ومواعيد الديدلاين القادمة.\n` +
+    `• ☀️ تقرير الصباح: ملخص بداية اليوم الشامل لجدولك وأولوياتك.\n\n` +
+    `اضغط على أي من الأزرار السريعة بالأسفل أو اكتب طلبك مباشرة:`
+  );
+}
+
+/**
+ * 5. Today's Schedule Brief
+ * Summarizes today's classes and homework due today.
+ */
+export async function generateTodayScheduleBrief(
+  supabase: SupabaseClient | any,
+  userId: string,
+  isEnglish: boolean = false
+): Promise<string> {
+  const todayDate = new Date();
+  const todayStr = todayDate.toISOString().split('T')[0];
+  const todayDayIdx = (todayDate.getDay() + 1) % 7;
+
+  const dayNamesEn = ['Saturday', 'Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday'];
+  const dayNamesAr = ['السبت', 'الأحد', 'الإثنين', 'الثلاثاء', 'الأربعاء', 'الخميس', 'الجمعة'];
+  const dayName = isEnglish ? dayNamesEn[todayDayIdx] : dayNamesAr[todayDayIdx];
+
+  try {
+    const [timetableRes, tasksRes] = await Promise.all([
+      supabase
+        .from('timetable')
+        .select('*')
+        .eq('user_id', userId)
+        .eq('day_of_week', todayDayIdx)
+        .order('start_time', { ascending: true }),
+      supabase
+        .from('assignments')
+        .select('*')
+        .eq('user_id', userId)
+        .eq('is_completed', false)
+        .eq('due_date', todayStr)
+        .limit(5),
+    ]);
+
+    const classes = timetableRes.data || [];
+    const dueTodayTasks = tasksRes.data || [];
+
+    let classesText = '';
+    if (classes.length === 0) {
+      classesText = isEnglish
+        ? '• No classes scheduled for today. You have an open day for self-study and revision!'
+        : '• لا توجد حصص أو دروس مجدولة اليوم. يومك مفتوح للمذاكرة الحرة والمراجعة!';
+    } else {
+      classesText = classes
+        .map((c: any) => {
+          const room = c.room_or_teacher ? ` (${c.room_or_teacher})` : '';
+          return `• ${c.start_time} - ${c.end_time}: ${c.subject}${room}`;
+        })
+        .join('\n');
+    }
+
+    let tasksText = '';
+    if (dueTodayTasks.length > 0) {
+      tasksText = `\n\n📝 ${isEnglish ? 'DUE TODAY:' : 'واجبات مطلوب تسليمها اليوم:'}\n` +
+        dueTodayTasks.map((t: any) => `• ${t.title} (${t.subject})`).join('\n');
+    }
+
+    if (isEnglish) {
+      return (
+        `📅 TODAY'S SCHEDULE — ${dayName.toUpperCase()} (${todayStr})\n\n` +
+        `CLASSES & TUTORS:\n${classesText}${tasksText}\n\n` +
+        `💡 What would you like to work on right now? Tap an option below:`
+      );
+    }
+
+    return (
+      `📅 جدول وحصص اليوم — يوم ${dayName} (${todayStr})\n\n` +
+      `الحصص والدروس المجدولة:\n${classesText}${tasksText}\n\n` +
+      `💡 تحب نبدأ بإيه دلوقتي؟ اختر من الأزرار بالأسفل:`
+    );
+  } catch (err) {
+    console.error('Error generating today schedule brief:', err);
+    return isEnglish ? '⚠️ Could not load today schedule.' : '⚠️ تعذر تحميل جدول اليوم حالياً.';
+  }
+}
+
+/**
+ * 6. "What Should I Study Right Now?" Smart Advisor
+ * Synthesizes exams, deadlines, and weak topics into ONE clear 45-minute decision.
+ */
+export async function generateWhatToStudyBrief(
+  supabase: SupabaseClient | any,
+  userId: string,
+  isEnglish: boolean = false
+): Promise<string> {
+  const todayDate = new Date();
+  const todayStr = todayDate.toISOString().split('T')[0];
+
+  try {
+    const [examsRes, assignmentsRes, memoriesRes, mistakesRes] = await Promise.all([
+      supabase
+        .from('exams')
+        .select('*')
+        .eq('user_id', userId)
+        .gte('exam_date', todayStr)
+        .order('exam_date', { ascending: true })
+        .limit(2),
+      supabase
+        .from('assignments')
+        .select('*')
+        .eq('user_id', userId)
+        .eq('is_completed', false)
+        .order('due_date', { ascending: true })
+        .limit(3),
+      supabase
+        .from('academic_memories')
+        .select('*')
+        .eq('user_id', userId)
+        .eq('confidence_level', 'low')
+        .limit(1)
+        .maybeSingle(),
+      supabase
+        .from('mistake_bank')
+        .select('*')
+        .eq('user_id', userId)
+        .eq('is_mastered', false)
+        .order('times_repeated', { ascending: false })
+        .limit(1)
+        .maybeSingle(),
+    ]);
+
+    const upcomingExams = examsRes.data || [];
+    const pendingTasks = assignmentsRes.data || [];
+    const weakMemory = memoriesRes.data;
+    const topMistake = mistakesRes.data;
+
+    let targetSubject = 'Mathematics';
+    let targetAction = '';
+    let reason = '';
+
+    if (upcomingExams.length > 0) {
+      const nearest = upcomingExams[0];
+      const diffDays = Math.ceil(
+        (new Date(nearest.exam_date).getTime() - todayDate.getTime()) / (1000 * 60 * 60 * 24)
+      );
+      if (diffDays <= 6) {
+        targetSubject = nearest.subject;
+        targetAction = isEnglish
+          ? `Comprehensive chapter revision in ${targetSubject}`
+          : `مراجعة شاملة لدروس ${targetSubject}`;
+        reason = isEnglish
+          ? `Your official exam is scheduled in ${diffDays} days (${nearest.exam_date}). Early mastery guarantees confidence.`
+          : `امتحانك الرسمي بعد ${diffDays} أيام (${nearest.exam_date}). المراجعة الآن تضمن تثبيت المنهج تماماً.`;
+      }
+    }
+
+    if (!targetAction && pendingTasks.length > 0) {
+      const topTask = pendingTasks[0];
+      targetSubject = topTask.subject;
+      targetAction = isEnglish
+        ? `Finish assignment: "${topTask.title}"`
+        : `إنجاز واجب: "${topTask.title}"`;
+      reason = isEnglish
+        ? `This homework deadline is approaching (${topTask.due_date || 'soon'}). Clearing it early keeps your dashboard clean.`
+        : `موعد تسليم الواجب اقترب (${topTask.due_date || 'قريباً'}). إنجازه الآن يصفي مهامك أولاً بأول.`;
+    }
+
+    if (!targetAction && weakMemory) {
+      targetSubject = weakMemory.subject;
+      targetAction = isEnglish
+        ? `Deep dive on weak topic: "${weakMemory.topic}"`
+        : `التركيز على نقطة الضعف: "${weakMemory.topic}"`;
+      reason = isEnglish
+        ? `This topic was recorded in your AI Study Memory with low confidence. Mastering it eliminates a major exam pitfall.`
+        : `هذه النقطة مسجلة في ذاكرتك الدراسية بمستوى منخفض. حل تمارين عليها الآن يزيل أي تردد في الامتحان.`;
+    }
+
+    if (!targetAction && topMistake) {
+      targetSubject = topMistake.subject;
+      targetAction = isEnglish
+        ? `Resolve Mistake Bank questions in ${targetSubject}`
+        : `حل وتصفير أسئلة بنك الأخطاء في ${targetSubject}`;
+      reason = isEnglish
+        ? `You have unmastered questions in this subject that were previously missed.`
+        : `لديك أسئلة سابقة مسجلة في بنك الأخطاء تحتاج تثبيت الإجابة النموذجية.`;
+    }
+
+    if (!targetAction) {
+      targetSubject = 'Physics';
+      targetAction = isEnglish
+        ? '45-minute focused revision on core engineering concepts'
+        : 'جلسة تركيز 45 دقيقة لمراجعة أثقل القوانين والمفاهيم';
+      reason = isEnglish
+        ? 'All immediate homework is cleared! Perfect window to strengthen your core subjects.'
+        : 'كل واجباتك الحالية منجزة! هذا أفضل وقت لتقوية المفاهيم ومسبقة المنهج بخطوة.';
+    }
+
+    if (isEnglish) {
+      return (
+        `🧠 SMART STUDY DECISION (45-Minute Focus Block)\n\n` +
+        `• Subject: ${targetSubject}\n` +
+        `• Recommended Task: ${targetAction}\n` +
+        `• Duration: 45 Minutes (Single Pomodoro Deep Work)\n` +
+        `• Logical Reason: ${reason}\n\n` +
+        `💡 Send "start focus session" when ready, or navigate using the buttons below:`
+      );
+    }
+
+    return (
+      `🧠 قرار المذاكرة الذكي (جلسة تركيز 45 دقيقة)\n\n` +
+      `• المادة: ${targetSubject}\n` +
+      `• المهمة المقترحة: ${targetAction}\n` +
+      `• المدة: 45 دقيقة (جلسة بومودورو تركيز صافي)\n` +
+      `• السبب المنطقي: ${reason}\n\n` +
+      `💡 اكتبلي "ابدأ جلسة تركيز" لما تبدأ، أو اختر الإجراء التالي من الأزرار بالأسفل:`
+    );
+  } catch (err) {
+    console.error('Error generating what to study brief:', err);
+    return isEnglish ? '⚠️ Could not generate study decision.' : '⚠️ تعذر تحديد قرار المذاكرة حالياً.';
+  }
+}
+
+/**
+ * 7. Pending Tasks & Assignments Brief
+ */
+export async function generatePendingTasksBrief(
+  supabase: SupabaseClient | any,
+  userId: string,
+  isEnglish: boolean = false
+): Promise<string> {
+  const todayStr = new Date().toISOString().split('T')[0];
+
+  try {
+    const { data: assignments, error } = await supabase
+      .from('assignments')
+      .select('*')
+      .eq('user_id', userId)
+      .eq('is_completed', false)
+      .order('due_date', { ascending: true })
+      .limit(10);
+
+    if (error || !assignments || assignments.length === 0) {
+      return isEnglish
+        ? '📝 PENDING HOMEWORK & TASKS\n\n🎉 All registered assignments are completed! Great work.\n\nTap an option below to plan your next study block:'
+        : '📝 الواجبات والمهام القادمة\n\n🎉 كل الواجبات والمهام المسجلة في لوحة التحكم منجزة بالكامل! عاش يا بطل.\n\nاختر من الأزرار بالأسفل لتنظيم خطوتك القادمة:';
+    }
+
+    const taskLines = assignments.map((a: any) => {
+      const isToday = a.due_date === todayStr;
+      const dueTag = isToday
+        ? (isEnglish ? 'Due TODAY' : 'تسليمه اليوم')
+        : (a.due_date ? `${isEnglish ? 'Due' : 'تسليم'}: ${a.due_date}` : (isEnglish ? 'No date' : 'بدون ميعاد'));
+      const priorityTag = a.priority === 'high' ? (isEnglish ? ' [High Priority]' : ' [أولوية قصوى]') : '';
+      return `• ${a.title} (${a.subject}) — ${dueTag}${priorityTag}`;
+    });
+
+    if (isEnglish) {
+      return (
+        `📝 PENDING HOMEWORK & ASSIGNMENTS (${assignments.length} Tasks)\n\n` +
+        `${taskLines.join('\n')}\n\n` +
+        `💡 Tell me "I finished [subject] homework" when you are done to mark it complete, or tap an option below:`
+      );
+    }
+
+    return (
+      `📝 الواجبات والمهام الدراسية المطلوب تسليمها (${assignments.length} واجب):\n\n` +
+      `${taskLines.join('\n')}\n\n` +
+      `💡 تقدر تقولي "خلصت واجب [اسم المادة]" عشان أعلّم عليه كـ منجز، أو اختر من الأزرار بالأسفل:`
+    );
+  } catch (err) {
+    console.error('Error generating pending tasks brief:', err);
+    return isEnglish ? '⚠️ Could not load pending tasks.' : '⚠️ تعذر تحميل الواجبات حالياً.';
+  }
+}
+
+
 
 
